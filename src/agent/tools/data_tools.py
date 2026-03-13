@@ -296,6 +296,127 @@ get_stock_info_tool = ToolDefinition(
 
 
 # ============================================================
+# get_turnover_profile — sentiment cycle analysis
+# ============================================================
+
+def _handle_get_turnover_profile(stock_code: str, days: int = 250) -> dict:
+    """Calculate turnover rate profile for sentiment cycle analysis.
+
+    Provides annual turnover rate context, trend, spike detection,
+    and sentiment zone classification.
+    """
+    manager = _get_fetcher_manager()
+    df, source = manager.get_daily_data(stock_code, days=max(days, 250))
+
+    if df is None or df.empty:
+        return {"error": f"No historical data for {stock_code}"}
+
+    if "turnover_rate" not in df.columns:
+        # Try to get turnover from realtime quote as fallback
+        quote = manager.get_realtime_quote(stock_code)
+        if quote and quote.turnover_rate:
+            return {
+                "code": stock_code,
+                "current_turnover": quote.turnover_rate,
+                "note": "Historical turnover data unavailable, only current day from realtime",
+                "zone": "未知",
+            }
+        return {"error": f"Turnover rate data not available for {stock_code}"}
+
+    tr = df["turnover_rate"].dropna()
+    if len(tr) < 5:
+        return {"error": f"Insufficient turnover data for {stock_code} (got {len(tr)} days)"}
+
+    current = float(tr.iloc[-1])
+    avg_5d = float(tr.iloc[-5:].mean())
+    avg_20d = float(tr.iloc[-20:].mean()) if len(tr) >= 20 else avg_5d
+    avg_60d = float(tr.iloc[-60:].mean()) if len(tr) >= 60 else avg_20d
+    avg_250d = float(tr.mean())
+
+    # Percentile: where current turnover sits in the annual distribution
+    percentile = int((tr <= current).sum() / len(tr) * 100)
+
+    # Trend: compare recent 5d vs prior 5d
+    trend = "平稳"
+    if len(tr) >= 10:
+        recent = float(tr.iloc[-5:].mean())
+        prior = float(tr.iloc[-10:-5].mean())
+        if prior > 0:
+            change = (recent - prior) / prior * 100
+            if change > 30:
+                trend = "升温"
+            elif change < -30:
+                trend = "降温"
+
+    # Spike detection: current > 5x avg_20d
+    spike_detected = current > avg_20d * 5 if avg_20d > 0 else False
+
+    # Consecutive low days: days below avg * 0.5
+    threshold = avg_250d * 0.5
+    consecutive_low = 0
+    for val in reversed(tr.values):
+        if val < threshold:
+            consecutive_low += 1
+        else:
+            break
+
+    # Sentiment zone classification
+    if current < 0.5:
+        zone = "冷淡"
+    elif current < 2:
+        zone = "平稳"
+    elif current < 5:
+        zone = "活跃"
+    elif current < 10:
+        zone = "过热"
+    else:
+        zone = "极度过热"
+
+    return {
+        "code": stock_code,
+        "source": source,
+        "current_turnover": round(current, 2),
+        "avg_5d": round(avg_5d, 2),
+        "avg_20d": round(avg_20d, 2),
+        "avg_60d": round(avg_60d, 2),
+        "avg_250d": round(avg_250d, 2),
+        "percentile_in_year": percentile,
+        "trend": trend,
+        "spike_detected": spike_detected,
+        "consecutive_low_days": consecutive_low,
+        "zone": zone,
+        "data_days": len(tr),
+    }
+
+
+get_turnover_profile_tool = ToolDefinition(
+    name="get_turnover_profile",
+    description="Get turnover rate profile for sentiment cycle analysis. "
+                "Returns current/5d/20d/60d/annual average turnover rates, "
+                "annual percentile ranking, trend (heating/cooling), "
+                "spike detection, consecutive low-activity days, "
+                "and sentiment zone (冷淡/平稳/活跃/过热/极度过热). "
+                "Essential for the emotion_cycle strategy.",
+    parameters=[
+        ToolParameter(
+            name="stock_code",
+            type="string",
+            description="Stock code, e.g., '600519'",
+        ),
+        ToolParameter(
+            name="days",
+            type="integer",
+            description="Number of days of history to analyze (default: 250, ~1 year)",
+            required=False,
+            default=250,
+        ),
+    ],
+    handler=_handle_get_turnover_profile,
+    category="data",
+)
+
+
+# ============================================================
 # Export all data tools
 # ============================================================
 
@@ -305,4 +426,5 @@ ALL_DATA_TOOLS = [
     get_chip_distribution_tool,
     get_analysis_context_tool,
     get_stock_info_tool,
+    get_turnover_profile_tool,
 ]

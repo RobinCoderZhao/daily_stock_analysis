@@ -14,8 +14,12 @@ from src.agent.tools.registry import ToolParameter, ToolDefinition
 logger = logging.getLogger(__name__)
 
 
-def _fetch_trend_data(stock_code: str):
-    """Fetch historical OHLCV (DataFrame) for trend analysis. DB first, then DataFetcher fallback."""
+def _fetch_trend_data(stock_code: str, days: int = 90, timeframe: str = "daily"):
+    """Fetch historical OHLCV (DataFrame) for trend analysis.
+
+    DB first, then DataFetcher fallback. Supports resampling to
+    weekly/monthly timeframes.
+    """
     from datetime import date, timedelta
     import pandas as pd
     from data_provider.base import canonical_stock_code, DataFetchError
@@ -25,8 +29,18 @@ def _fetch_trend_data(stock_code: str):
     code = canonical_stock_code(stock_code)
     if not code:
         return None
+
+    # Fetch extra days for resampling headroom
+    fetch_days = days
+    if timeframe == "weekly":
+        fetch_days = max(days * 7, 365)
+    elif timeframe == "monthly":
+        fetch_days = max(days * 30, 730)
+
     end_date = date.today()
-    start_date = end_date - timedelta(days=89)  # ~60 trading days, mirrors pipeline Step 3
+    start_date = end_date - timedelta(days=int(fetch_days * 1.5))
+
+    df = None
 
     # 1. Try DB
     try:
@@ -35,7 +49,6 @@ def _fetch_trend_data(stock_code: str):
         if bars:
             df = pd.DataFrame([b.to_dict() for b in bars])
             logger.debug("analyze_trend(%s): loaded %d rows from DB", stock_code, len(df))
-            return df
     except Exception as e:
         logger.debug(
             "analyze_trend(%s): DB lookup failed (%s), falling back to DataFetcherManager",
@@ -43,36 +56,63 @@ def _fetch_trend_data(stock_code: str):
         )
 
     # 2. Fallback to DataFetcherManager
-    try:
-        manager = DataFetcherManager()
-        df, _ = manager.get_daily_data(code, days=90)
-        if df is not None and not df.empty:
-            logger.info(
-                "analyze_trend(%s): DB empty, loaded %d rows from DataFetcherManager",
-                stock_code, len(df)
-            )
-            return df
-    except DataFetchError as e:
-        logger.warning("analyze_trend(%s): DataFetcherManager failed: %s", stock_code, e)
-    except Exception as e:
-        logger.warning("analyze_trend(%s): DataFetcherManager unexpected error: %s", stock_code, e)
+    if df is None or df.empty:
+        try:
+            manager = DataFetcherManager()
+            df, _ = manager.get_daily_data(code, days=fetch_days)
+            if df is not None and not df.empty:
+                logger.info(
+                    "analyze_trend(%s): DB empty, loaded %d rows from DataFetcherManager",
+                    stock_code, len(df)
+                )
+        except DataFetchError as e:
+            logger.warning("analyze_trend(%s): DataFetcherManager failed: %s", stock_code, e)
+            return None
+        except Exception as e:
+            logger.warning("analyze_trend(%s): DataFetcherManager unexpected error: %s", stock_code, e)
+            return None
 
-    return None
+    if df is None or df.empty:
+        return None
+
+    # 3. Resample to weekly/monthly if requested
+    if timeframe in ("weekly", "monthly") and 'date' in df.columns:
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+        rule = 'W' if timeframe == "weekly" else 'ME'
+        df = df.set_index('date').resample(rule).agg({
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum',
+        }).dropna().reset_index()
+        # Carry over turnover_rate as weekly/monthly average if available
+        logger.info(
+            "analyze_trend(%s): resampled to %s, %d periods",
+            stock_code, timeframe, len(df)
+        )
+
+    return df
 
 
-def _handle_analyze_trend(stock_code: str) -> dict:
+def _handle_analyze_trend(stock_code: str, timeframe: str = "daily", days: int = 90) -> dict:
     """Run technical trend analysis on a stock."""
     from src.stock_analyzer import StockTrendAnalyzer
 
     if not (stock_code and str(stock_code).strip()):
         return {"error": "stock_code is required"}
 
-    df = _fetch_trend_data(stock_code)
+    # Clamp days to reasonable range
+    days = max(30, min(days, 365))
+
+    df = _fetch_trend_data(stock_code, days=days, timeframe=timeframe)
     if df is None or df.empty:
         return {"error": f"No historical data available for trend analysis on {stock_code}"}
 
-    if len(df) < 20:
-        return {"error": f"Insufficient data for trend analysis on {stock_code} (need >= 20 days)"}
+    min_periods = 10 if timeframe in ("weekly", "monthly") else 20
+    if len(df) < min_periods:
+        return {"error": f"Insufficient data for {timeframe} trend analysis on {stock_code} (need >= {min_periods})"}
 
     analyzer = StockTrendAnalyzer()
     try:
@@ -81,8 +121,9 @@ def _handle_analyze_trend(stock_code: str) -> dict:
         logger.warning("analyze_trend(%s): Trend analysis failed", stock_code, exc_info=True)
         return {"error": f"Trend analysis failed for {stock_code}"}
 
-    return {
+    result_dict = {
         "code": result.code,
+        "timeframe": timeframe,
         "trend_status": result.trend_status.value,
         "ma_alignment": result.ma_alignment,
         "trend_strength": result.trend_strength,
@@ -128,12 +169,14 @@ def _handle_analyze_trend(stock_code: str) -> dict:
         "signal_reasons": result.signal_reasons,
         "risk_factors": result.risk_factors,
     }
+    return result_dict
 
 
 analyze_trend_tool = ToolDefinition(
     name="analyze_trend",
     description="Run comprehensive technical trend analysis on a stock. "
                 "Fetches historical data from database or data source. "
+                "Supports daily (default), weekly, and monthly timeframes. "
                 "Returns MA alignment, bias rates, MACD status (incl. divergence detection), "
                 "RSI levels, ATR volatility, turnover rate profile, MA20 slope direction, "
                 "volume analysis, support/resistance levels, and a buy/sell signal "
@@ -143,6 +186,21 @@ analyze_trend_tool = ToolDefinition(
             name="stock_code",
             type="string",
             description="Stock code to analyze, e.g., '600519'",
+        ),
+        ToolParameter(
+            name="timeframe",
+            type="string",
+            description="Timeframe: 'daily' (default), 'weekly', or 'monthly'",
+            required=False,
+            default="daily",
+            enum=["daily", "weekly", "monthly"],
+        ),
+        ToolParameter(
+            name="days",
+            type="integer",
+            description="Number of days of history to fetch (default: 90, max: 365)",
+            required=False,
+            default=90,
         ),
     ],
     handler=_handle_analyze_trend,

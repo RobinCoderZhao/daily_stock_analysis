@@ -21,6 +21,13 @@ logger = logging.getLogger(__name__)
 # Built-in strategies directory (project_root/strategies/)
 _BUILTIN_STRATEGIES_DIR = Path(__file__).resolve().parent.parent.parent.parent / "strategies"
 
+# Strategy conflict matrix: pairs of strategies that may produce contradictory signals
+_CONFLICT_MATRIX = {
+    ("shrink_pullback", "volume_breakout"): "Volume direction conflict: shrink_pullback expects low volume, volume_breakout expects high volume",
+    ("bull_trend", "bottom_volume"): "Trend direction conflict: bull_trend needs uptrend, bottom_volume needs downtrend reversal",
+    ("box_oscillation", "volume_breakout"): "Structure conflict: box_oscillation expects range-bound, volume_breakout expects breakout",
+}
+
 
 @dataclass
 class Skill:
@@ -242,6 +249,24 @@ class SkillManager:
 
         activated = [s.name for s in self._skills.values() if s.enabled]
         logger.info(f"Activated strategies: {activated}")
+
+        # Check for conflicts among activated strategies
+        conflicts = self.check_conflicts()
+        for conflict_msg in conflicts:
+            logger.warning(f"Strategy conflict: {conflict_msg}")
+
+    def check_conflicts(self) -> List[str]:
+        """Check for conflicts among active strategies.
+
+        Returns:
+            List of conflict warning messages (empty if no conflicts).
+        """
+        active_names = {s.name for s in self._skills.values() if s.enabled}
+        conflicts = []
+        for (a, b), reason in _CONFLICT_MATRIX.items():
+            if a in active_names and b in active_names:
+                conflicts.append(f"{a} ↔ {b}: {reason}")
+        return conflicts
 
     def get_skill_instructions(self) -> str:
         """Generate combined instruction text for all active skills.

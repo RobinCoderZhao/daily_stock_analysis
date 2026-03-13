@@ -42,6 +42,7 @@ _THINKING_TOOL_LABELS: Dict[str, str] = {
     "analyze_pattern": "K线形态识别",
     "get_volume_analysis": "量能分析",
     "calculate_ma": "均线计算",
+    "get_turnover_profile": "换手率画像",
 }
 
 
@@ -61,6 +62,11 @@ class AgentResult:
     provider: str = ""
     model: str = ""                            # comma-separated models used (supports fallback)
     error: Optional[str] = None
+    # Strategy hit tracking
+    matched_strategies: List[str] = field(default_factory=list)
+    strategy_scores: Dict[str, Any] = field(default_factory=dict)
+    # Tool performance tracking
+    tool_timings: List[Dict[str, Any]] = field(default_factory=list)
 
 
 # ============================================================
