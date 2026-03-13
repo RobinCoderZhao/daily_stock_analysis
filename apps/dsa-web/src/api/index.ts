@@ -16,9 +16,10 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const path = window.location.pathname + window.location.search;
-      if (!path.startsWith('/login')) {
+      const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+      if (!path.startsWith(`${basePath}/login`)) {
         const redirect = encodeURIComponent(path);
-        window.location.assign(`/login?redirect=${redirect}`);
+        window.location.assign(`${basePath}/login?redirect=${redirect}`);
       }
     }
     attachParsedApiError(error);

@@ -317,6 +317,25 @@ python main.py
 
 > 也可以使用 `python main.py --serve` (等效命令)
 
+### 子路径部署（反向代理）
+
+如需将 Web 界面部署在反向代理（如 Nginx）的子路径下（例如 `https://example.com/gushi/`），需在**构建前端时**指定 `VITE_BASE_PATH` 环境变量：
+
+```bash
+# 部署在 /gushi/ 子路径下
+cd apps/dsa-web
+VITE_BASE_PATH=/gushi/ npm run build
+
+# 部署在根路径（默认行为，无需设置）
+npm run build
+```
+
+| 环境变量 | 说明 | 默认值 | 示例 |
+|---------|------|--------|------|
+| `VITE_BASE_PATH` | 前端构建时的 base path，影响静态资源路径、前端路由和 API 请求前缀 | `/` | `/gushi/` |
+
+> **注意**：`VITE_BASE_PATH` 是**构建时**变量，修改后需重新执行 `npm run build`。路径必须以 `/` 开头和结尾。
+
 ## 🗺️ Roadmap
 
 查看已支持的功能和未来规划：[更新日志](docs/CHANGELOG.md)
