@@ -118,6 +118,9 @@ class TrendAnalysisResult:
     macd_bar: float = 0.0           # MACD 柱状图
     macd_status: MACDStatus = MACDStatus.BULLISH
     macd_signal: str = ""            # MACD 信号描述
+    macd_divergence: str = ""        # MACD divergence: "顶背驰" / "底背驰" / "无"
+    macd_bar_area_recent: float = 0  # Bar area of the most recent segment
+    macd_bar_area_prev: float = 0    # Bar area of the previous segment
 
     # RSI 指标
     rsi_6: float = 0.0              # RSI(6) 短期
@@ -125,6 +128,21 @@ class TrendAnalysisResult:
     rsi_24: float = 0.0             # RSI(24) 长期
     rsi_status: RSIStatus = RSIStatus.NEUTRAL
     rsi_signal: str = ""              # RSI 信号描述
+
+    # ATR (Average True Range)
+    atr_14: float = 0.0             # 14-day ATR
+    atr_ratio: float = 0.0          # ATR / price * 100 (volatility %)
+    atr_trend: str = ""             # ATR trend: "收缩" / "扩大" / "平稳"
+
+    # Turnover rate
+    turnover_rate: float = 0.0      # Current day turnover rate %
+    turnover_avg_5d: float = 0.0    # 5-day average turnover rate %
+    turnover_avg_20d: float = 0.0   # 20-day average turnover rate %
+    turnover_trend: str = ""        # Turnover trend: "升温" / "降温" / "平稳"
+
+    # MA slope
+    ma20_slope: float = 0.0         # MA20 5-day slope (% change)
+    ma20_direction: str = ""        # MA20 direction: "上行" / "下行" / "走平"
 
     # 买入信号
     buy_signal: BuySignal = BuySignal.WAIT
@@ -160,11 +178,23 @@ class TrendAnalysisResult:
             'macd_bar': self.macd_bar,
             'macd_status': self.macd_status.value,
             'macd_signal': self.macd_signal,
+            'macd_divergence': self.macd_divergence,
+            'macd_bar_area_recent': self.macd_bar_area_recent,
+            'macd_bar_area_prev': self.macd_bar_area_prev,
             'rsi_6': self.rsi_6,
             'rsi_12': self.rsi_12,
             'rsi_24': self.rsi_24,
             'rsi_status': self.rsi_status.value,
             'rsi_signal': self.rsi_signal,
+            'atr_14': self.atr_14,
+            'atr_ratio': self.atr_ratio,
+            'atr_trend': self.atr_trend,
+            'turnover_rate': self.turnover_rate,
+            'turnover_avg_5d': self.turnover_avg_5d,
+            'turnover_avg_20d': self.turnover_avg_20d,
+            'turnover_trend': self.turnover_trend,
+            'ma20_slope': self.ma20_slope,
+            'ma20_direction': self.ma20_direction,
         }
 
 
@@ -230,6 +260,9 @@ class StockTrendAnalyzer:
         df = self._calculate_macd(df)
         df = self._calculate_rsi(df)
 
+        # 计算 ATR
+        df = self._calculate_atr(df)
+
         # 获取最新数据
         latest = df.iloc[-1]
         result.current_price = float(latest['close'])
@@ -253,10 +286,22 @@ class StockTrendAnalyzer:
         # 5. MACD 分析
         self._analyze_macd(df, result)
 
+        # 5b. MACD divergence detection
+        self._detect_macd_divergence(df, result)
+
         # 6. RSI 分析
         self._analyze_rsi(df, result)
 
-        # 7. 生成买入信号
+        # 7. ATR 分析
+        self._analyze_atr(df, result)
+
+        # 8. Turnover rate analysis
+        self._analyze_turnover(df, result)
+
+        # 9. MA20 slope analysis
+        self._analyze_ma_slope(df, result)
+
+        # 10. 生成买入信号
         self._generate_signal(result)
 
         return result
@@ -298,6 +343,26 @@ class StockTrendAnalyzer:
 
         # 计算柱状图
         df['MACD_BAR'] = (df['MACD_DIF'] - df['MACD_DEA']) * 2
+
+        return df
+
+    def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+        """
+        Calculate Average True Range (ATR).
+
+        ATR measures market volatility by decomposing the entire range
+        of a price for a given period.
+        """
+        df = df.copy()
+        high, low, close = df['high'], df['low'], df['close']
+
+        # True Range = max(H-L, |H-prev_C|, |L-prev_C|)
+        prev_close = close.shift(1)
+        tr1 = high - low
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        df['TR'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        df['ATR_14'] = df['TR'].rolling(window=period).mean()
 
         return df
 
@@ -540,6 +605,64 @@ class StockTrendAnalyzer:
             result.macd_status = MACDStatus.BULLISH
             result.macd_signal = " MACD 中性区域"
 
+    def _detect_macd_divergence(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """
+        Detect MACD bar area divergence (top/bottom divergence).
+
+        Top divergence: price makes higher high but MACD bar area shrinks.
+        Bottom divergence: price makes lower low but MACD bar area shrinks.
+        """
+        if len(df) < self.MACD_SLOW + 10:
+            result.macd_divergence = "数据不足"
+            return
+
+        bars = df['MACD_BAR'].values
+        highs = df['high'].values
+        lows = df['low'].values
+
+        # Split MACD bars into segments by zero-crossings
+        segments = []  # list of (start_idx, end_idx, polarity)
+        seg_start = 0
+        for i in range(1, len(bars)):
+            if (bars[i] >= 0) != (bars[i - 1] >= 0):
+                segments.append((seg_start, i, 1 if bars[seg_start] >= 0 else -1))
+                seg_start = i
+        segments.append((seg_start, len(bars), 1 if bars[seg_start] >= 0 else -1))
+
+        # Filter out tiny segments (< 3 bars) which are noise
+        segments = [(s, e, p) for s, e, p in segments if e - s >= 3]
+
+        if len(segments) < 2:
+            result.macd_divergence = "无"
+            return
+
+        recent = segments[-1]
+        prev = segments[-2]
+
+        recent_area = sum(abs(bars[i]) for i in range(recent[0], recent[1]))
+        prev_area = sum(abs(bars[i]) for i in range(prev[0], prev[1]))
+
+        result.macd_bar_area_recent = round(recent_area, 4)
+        result.macd_bar_area_prev = round(prev_area, 4)
+
+        # Top divergence: both segments positive, price higher but area smaller
+        if recent[2] > 0 and prev[2] > 0:
+            recent_high = max(highs[recent[0]:recent[1]])
+            prev_high = max(highs[prev[0]:prev[1]])
+            if recent_high > prev_high and recent_area < prev_area * 0.75:
+                result.macd_divergence = "顶背驰"
+                return
+
+        # Bottom divergence: both segments negative, price lower but area smaller
+        if recent[2] < 0 and prev[2] < 0:
+            recent_low = min(lows[recent[0]:recent[1]])
+            prev_low = min(lows[prev[0]:prev[1]])
+            if recent_low < prev_low and recent_area < prev_area * 0.75:
+                result.macd_divergence = "底背驰"
+                return
+
+        result.macd_divergence = "无"
+
     def _analyze_rsi(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
         """
         分析 RSI 指标
@@ -579,6 +702,110 @@ class StockTrendAnalyzer:
         else:
             result.rsi_status = RSIStatus.OVERSOLD
             result.rsi_signal = f"⭐ RSI超卖({rsi_mid:.1f}<30)，反弹机会大"
+
+    def _analyze_atr(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """
+        Analyze ATR (Average True Range) for volatility assessment.
+
+        Useful for emotion_cycle strategy (volatility contraction detection)
+        and position sizing.
+        """
+        if 'ATR_14' not in df.columns or len(df) < 20:
+            result.atr_trend = "数据不足"
+            return
+
+        latest_atr = float(df['ATR_14'].iloc[-1])
+        if np.isnan(latest_atr):
+            result.atr_trend = "数据不足"
+            return
+
+        result.atr_14 = round(latest_atr, 4)
+        result.atr_ratio = round(latest_atr / result.current_price * 100, 2) if result.current_price > 0 else 0
+
+        # ATR trend: compare recent 5-day avg ATR vs prior 5-day avg ATR
+        if len(df) >= 14:
+            atr_vals = df['ATR_14'].dropna()
+            if len(atr_vals) >= 10:
+                recent_atr = float(atr_vals.iloc[-5:].mean())
+                prior_atr = float(atr_vals.iloc[-10:-5].mean())
+                if prior_atr > 0:
+                    atr_change = (recent_atr - prior_atr) / prior_atr * 100
+                    if atr_change > 15:
+                        result.atr_trend = "扩大"
+                    elif atr_change < -15:
+                        result.atr_trend = "收缩"
+                    else:
+                        result.atr_trend = "平稳"
+                else:
+                    result.atr_trend = "平稳"
+            else:
+                result.atr_trend = "平稳"
+        else:
+            result.atr_trend = "平稳"
+
+    def _analyze_turnover(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """
+        Analyze turnover rate for sentiment cycle assessment.
+
+        Turnover rate is a key indicator for identifying sentiment extremes
+        (too cold = potential bottom, too hot = potential top).
+        """
+        if 'turnover_rate' not in df.columns:
+            result.turnover_trend = "数据不可用"
+            return
+
+        tr = df['turnover_rate'].dropna()
+        if len(tr) < 5:
+            result.turnover_trend = "数据不足"
+            return
+
+        result.turnover_rate = round(float(tr.iloc[-1]), 2)
+        result.turnover_avg_5d = round(float(tr.iloc[-5:].mean()), 2)
+        result.turnover_avg_20d = round(float(tr.iloc[-20:].mean()), 2) if len(tr) >= 20 else result.turnover_avg_5d
+
+        # Trend detection: compare recent 5d vs prior 5d
+        if len(tr) >= 10:
+            recent = float(tr.iloc[-5:].mean())
+            prior = float(tr.iloc[-10:-5].mean())
+            if prior > 0:
+                change_pct = (recent - prior) / prior * 100
+                if change_pct > 30:
+                    result.turnover_trend = "升温"
+                elif change_pct < -30:
+                    result.turnover_trend = "降温"
+                else:
+                    result.turnover_trend = "平稳"
+            else:
+                result.turnover_trend = "平稳"
+        else:
+            result.turnover_trend = "平稳"
+
+    def _analyze_ma_slope(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """
+        Calculate MA20 slope over the last 5 trading days.
+
+        Slope > 0.1% → up, < -0.1% → down, else flat.
+        This directly addresses bull_trend strategy's requirement for
+        'MA20 斜率向上' check.
+        """
+        if len(df) < 26 or 'MA20' not in df.columns:
+            result.ma20_direction = "数据不足"
+            return
+
+        ma20_now = float(df['MA20'].iloc[-1])
+        ma20_5d_ago = float(df['MA20'].iloc[-6])
+
+        if np.isnan(ma20_now) or np.isnan(ma20_5d_ago) or ma20_5d_ago == 0:
+            result.ma20_direction = "数据不足"
+            return
+
+        result.ma20_slope = round((ma20_now - ma20_5d_ago) / ma20_5d_ago * 100, 3)
+        if result.ma20_slope > 0.1:
+            result.ma20_direction = "上行"
+        elif result.ma20_slope < -0.1:
+            result.ma20_direction = "下行"
+        else:
+            result.ma20_direction = "走平"
 
     def _generate_signal(self, result: TrendAnalysisResult) -> None:
         """

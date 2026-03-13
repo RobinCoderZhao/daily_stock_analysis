@@ -44,7 +44,7 @@ _SKILL_MANAGER_CUSTOM_DIR: object = _SENTINEL
 
 DEFAULT_AGENT_SKILLS = [
     "bull_trend",
-    "ma_golden_cross",
+    "one_yang_three_yin",
     "volume_breakout",
     "shrink_pullback",
 ]

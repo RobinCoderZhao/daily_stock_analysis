@@ -106,11 +106,23 @@ def _handle_analyze_trend(stock_code: str) -> dict:
         "macd_bar": round(result.macd_bar, 4),
         "macd_status": result.macd_status.value,
         "macd_signal": result.macd_signal,
+        "macd_divergence": result.macd_divergence,
+        "macd_bar_area_recent": result.macd_bar_area_recent,
+        "macd_bar_area_prev": result.macd_bar_area_prev,
         "rsi_6": round(result.rsi_6, 2),
         "rsi_12": round(result.rsi_12, 2),
         "rsi_24": round(result.rsi_24, 2),
         "rsi_status": result.rsi_status.value,
         "rsi_signal": result.rsi_signal,
+        "atr_14": result.atr_14,
+        "atr_ratio": result.atr_ratio,
+        "atr_trend": result.atr_trend,
+        "turnover_rate": result.turnover_rate,
+        "turnover_avg_5d": result.turnover_avg_5d,
+        "turnover_avg_20d": result.turnover_avg_20d,
+        "turnover_trend": result.turnover_trend,
+        "ma20_slope": result.ma20_slope,
+        "ma20_direction": result.ma20_direction,
         "buy_signal": result.buy_signal.value,
         "signal_score": result.signal_score,
         "signal_reasons": result.signal_reasons,
@@ -122,7 +134,8 @@ analyze_trend_tool = ToolDefinition(
     name="analyze_trend",
     description="Run comprehensive technical trend analysis on a stock. "
                 "Fetches historical data from database or data source. "
-                "Returns MA alignment, bias rates, MACD status, RSI levels, "
+                "Returns MA alignment, bias rates, MACD status (incl. divergence detection), "
+                "RSI levels, ATR volatility, turnover rate profile, MA20 slope direction, "
                 "volume analysis, support/resistance levels, and a buy/sell signal "
                 "with a score (0-100).",
     parameters=[
