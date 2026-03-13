@@ -42,3 +42,9 @@ instructions: |
   - 回踩关键均线后企稳：`sentiment_score +8`
   - 放量突破关键阻力：`sentiment_score +10`
   - 跌破 MA20 或趋势转弱：`sentiment_score -12`
+# Strategy reliability and market conditions
+confidence_weight: 0.95
+applicable_market:
+  - trend
+not_applicable_market:
+  - crash

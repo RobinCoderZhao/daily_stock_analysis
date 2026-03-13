@@ -74,3 +74,8 @@ instructions: |
   - 情绪顶部特征满足3项以上：`sentiment_score -12`
   - 情绪顶部特征满足全部5项：`sentiment_score -20`
   - 情绪平稳区间：不调整基础分
+
+confidence_weight: 0.60
+applicable_market:
+  - reversal
+  - oscillation

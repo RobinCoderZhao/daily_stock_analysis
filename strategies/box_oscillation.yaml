@@ -64,3 +64,10 @@ instructions: |
   - 箱体向上有效突破：`sentiment_score +15，转趋势策略`
   - 处于箱顶区域：`sentiment_score -5（不追高）`
   - 箱底有效跌破：`sentiment_score -15，离场`
+
+confidence_weight: 0.65
+applicable_market:
+  - oscillation
+not_applicable_market:
+  - trend
+  - crash

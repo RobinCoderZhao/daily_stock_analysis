@@ -59,3 +59,8 @@ instructions: |
   - 第3浪突破确认：`sentiment_score +12`
   - 第5浪末端/顶背离：`sentiment_score -10`
   - C浪下跌中：`sentiment_score -12`
+
+confidence_weight: 0.40
+applicable_market:
+  - trend
+  - oscillation

@@ -61,9 +61,11 @@ def get_tool_registry():
     from src.agent.tools.analysis_tools import ALL_ANALYSIS_TOOLS
     from src.agent.tools.search_tools import ALL_SEARCH_TOOLS
     from src.agent.tools.market_tools import ALL_MARKET_TOOLS
+    from src.agent.tools.structure_tools import ALL_STRUCTURE_TOOLS
 
     registry = ToolRegistry()
-    for tool_fn in ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS:
+    all_tools = ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS + ALL_STRUCTURE_TOOLS
+    for tool_fn in all_tools:
         registry.register(tool_fn)
 
     _TOOL_REGISTRY = registry

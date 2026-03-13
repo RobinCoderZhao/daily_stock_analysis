@@ -41,3 +41,8 @@ instructions: |
   - MACD 零轴上方金叉：额外 +5
   - 在 `ma_analysis` 和 `buy_reason` 中注明"均线金叉"。
   - 理想买点设在交叉均线水平附近。
+
+confidence_weight: 0.80
+applicable_market:
+  - trend
+  - oscillation

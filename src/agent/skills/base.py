@@ -57,6 +57,11 @@ class Skill:
     required_tools: List[str] = field(default_factory=list)
     enabled: bool = False
     source: str = "builtin"
+    # Confidence weight (0.0-1.0): how reliably an LLM can execute this strategy
+    confidence_weight: float = 1.0
+    # Applicable market conditions
+    applicable_market: List[str] = field(default_factory=list)
+    not_applicable_market: List[str] = field(default_factory=list)
 
 
 def load_skill_from_yaml(filepath: Union[str, Path]) -> Skill:
@@ -105,6 +110,9 @@ def load_skill_from_yaml(filepath: Union[str, Path]) -> Skill:
         required_tools=data.get("required_tools", []) or [],
         enabled=False,
         source=str(filepath),
+        confidence_weight=float(data.get("confidence_weight", 1.0)),
+        applicable_market=data.get("applicable_market", []) or [],
+        not_applicable_market=data.get("not_applicable_market", []) or [],
     )
 
 
@@ -299,9 +307,16 @@ class SkillManager:
                 rules_ref = ""
                 if skill.core_rules:
                     rules_ref = f"（关联核心理念：第{'、'.join(str(r) for r in skill.core_rules)}条）"
+                # Confidence hint for the LLM
+                confidence_note = ""
+                if skill.confidence_weight < 0.7:
+                    confidence_note = f"\n> ⚠️ 此策略置信度较低({skill.confidence_weight})，建议结合其他策略交叉验证再做判断。"
+                elif skill.confidence_weight < 0.9:
+                    confidence_note = f"\n> ℹ️ 此策略置信度中等({skill.confidence_weight})，建议参考但不作为唯一决策依据。"
                 parts.append(
                     f"### 策略 {idx}: {skill.display_name} {rules_ref}\n\n"
-                    f"**适用场景**: {skill.description}\n\n"
+                    f"**适用场景**: {skill.description}\n"
+                    f"{confidence_note}\n"
                     f"{skill.instructions}\n"
                 )
                 idx += 1
@@ -314,3 +329,37 @@ class SkillManager:
         for s in self.list_active_skills():
             tools.update(s.required_tools)
         return list(tools)
+
+    def match_strategies_for_market(self, market_condition: str) -> List[str]:
+        """Return strategy names suitable for the given market condition.
+
+        This enables proactive strategy matching: instead of injecting all
+        active strategies into the prompt, only inject those whose
+        ``applicable_market`` includes the current condition.
+
+        Args:
+            market_condition: One of "trend", "oscillation", "reversal", "crash".
+
+        Returns:
+            List of strategy names that are applicable.
+            If no explicit matches, returns all active strategy names (fallback).
+        """
+        active = self.list_active_skills()
+        if not active:
+            return []
+
+        matched = []
+        for skill in active:
+            # Skip if strategy explicitly excludes this market
+            if market_condition in skill.not_applicable_market:
+                continue
+            # Include if applicable_market is empty (compatible with all) or matches
+            if not skill.applicable_market or market_condition in skill.applicable_market:
+                matched.append(skill.name)
+
+        # Fallback: if filtering removed everything, return all active
+        if not matched:
+            matched = [s.name for s in active]
+            logger.info(f"No strategies matched market '{market_condition}', using all {len(matched)} active strategies")
+
+        return matched

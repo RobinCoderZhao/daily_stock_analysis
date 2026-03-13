@@ -39,3 +39,10 @@ instructions: |
   - 确认为龙头股：sentiment_score +10
   - 板块正处于主动轮动期：额外 +5
   - 在 `buy_reason` 中注明"龙头策略"判断结果。
+
+confidence_weight: 0.45
+applicable_market:
+  - trend
+not_applicable_market:
+  - crash
+  - oscillation

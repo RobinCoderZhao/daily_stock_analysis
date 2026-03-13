@@ -40,3 +40,10 @@ instructions: |
   - 理想买点设在 MA5 水平，次优买点设在 MA10。
   - 止损设在 MA20 水平。
   - 在 `buy_reason` 中注明"缩量回踩"。
+
+# Strategy reliability and market conditions
+confidence_weight: 0.95
+applicable_market:
+  - trend
+not_applicable_market:
+  - crash

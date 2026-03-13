@@ -53,3 +53,8 @@ instructions: |
   - 二买/三买共振：`sentiment_score +10`
   - 中枢震荡无明确方向：`sentiment_score 维持基准`
   - 顶背驰 / 趋势向下：`sentiment_score -15`
+
+confidence_weight: 0.55
+applicable_market:
+  - trend
+  - oscillation

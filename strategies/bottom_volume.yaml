@@ -44,3 +44,9 @@ instructions: |
   - 配合阳线 + 新闻催化：额外 +5
   - 在 `buy_reason` 和 `pattern_analysis` 中注明"底部放量"。
   - 止损设在近期低点。
+
+confidence_weight: 0.70
+applicable_market:
+  - reversal
+not_applicable_market:
+  - trend

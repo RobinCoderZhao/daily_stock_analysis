@@ -33,3 +33,7 @@ instructions: |
   - 形态成立但趋势不明：sentiment_score +5
   - 在 `pattern_analysis` 和 `buy_reason` 中注明"一阳夹三阴"。
   - 理想买点设在第5日收盘价附近，止损设在第1日开盘价下方。
+
+confidence_weight: 0.90
+applicable_market:
+  - trend
