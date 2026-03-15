@@ -236,15 +236,21 @@ def _is_saas_mode() -> bool:
 
 def _set_refresh_cookie(response: JSONResponse, refresh_token: str, request: Request = None):
     """Set refresh token as HttpOnly cookie."""
+    # Detect if running behind HTTPS (via X-Forwarded-Proto or explicit config)
+    is_https = False
+    if request:
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = forwarded_proto == "https" or str(request.url).startswith("https")
     response.set_cookie(
         key="dsa_refresh_token",
         value=refresh_token,
         httponly=True,
         samesite="lax",
-        secure=False,  # Set True in production with HTTPS
-        path="/api/v1/auth",
+        secure=is_https,
+        path="/",  # Must be "/" so cookie is sent under any reverse-proxy prefix
         max_age=7 * 24 * 3600,  # 7 days
     )
+
 
 
 @router.post(
@@ -282,7 +288,7 @@ async def auth_register(request: Request):
             "tier": result["tier"],
             "access_token": result["access_token"],
         })
-        _set_refresh_cookie(resp, result["refresh_token"])
+        _set_refresh_cookie(resp, result["refresh_token"], request)
         return resp
 
     except UserServiceError as e:
@@ -327,7 +333,7 @@ async def auth_saas_login(request: Request):
             "tier": result["tier"],
             "access_token": result["access_token"],
         })
-        _set_refresh_cookie(resp, result["refresh_token"])
+        _set_refresh_cookie(resp, result["refresh_token"], request)
         return resp
 
     except UserServiceError as e:
@@ -361,7 +367,7 @@ async def auth_refresh(request: Request):
         result = service.refresh_token(refresh)
 
         resp = JSONResponse(content={"access_token": result["access_token"]})
-        _set_refresh_cookie(resp, result["refresh_token"])
+        _set_refresh_cookie(resp, result["refresh_token"], request)
         return resp
 
     except UserServiceError as e:

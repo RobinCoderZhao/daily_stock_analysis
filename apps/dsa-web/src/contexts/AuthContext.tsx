@@ -99,16 +99,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPasswordChangeable(status.passwordChangeable ?? false);
       setSaasMode(status.saasMode ?? false);
 
-      // If SaaS mode and we have a token, try to load profile
-      if (status.saasMode && getAccessToken()) {
-        try {
-          const profile = await authApi.getProfile();
-          setUser(profile);
-          setLoggedIn(true);
-        } catch {
-          // Token might be expired
-          setAccessToken(null);
-          setLoggedIn(false);
+      // If SaaS mode, attempt to restore session from refresh token cookie
+      if (status.saasMode) {
+        let token = getAccessToken();
+
+        // No in-memory token — try to get one from the refresh token cookie
+        if (!token) {
+          try {
+            const result = await authApi.refreshToken();
+            setAccessToken(result.access_token);
+            token = result.access_token;
+            startTokenRefresh();
+          } catch {
+            // No valid refresh token cookie — user must log in
+          }
+        }
+
+        if (token) {
+          try {
+            const profile = await authApi.getProfile();
+            setUser(profile);
+            setLoggedIn(true);
+          } catch {
+            // Token might be expired
+            setAccessToken(null);
+            setLoggedIn(false);
+          }
         }
       }
     } catch (err) {
@@ -120,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [startTokenRefresh]);
 
   useEffect(() => {
     void fetchStatus();
