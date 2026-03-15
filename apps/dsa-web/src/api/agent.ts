@@ -1,4 +1,4 @@
-import apiClient from './index';
+import apiClient, { getAccessToken } from './index';
 import { API_BASE_URL } from '../utils/constants';
 import { createApiError, isApiRequestError, parseApiError } from './error';
 
@@ -89,9 +89,14 @@ export const agentApi = {
     const base = API_BASE_URL || '';
     const url = `${base}/api/v1/agent/chat/stream`;
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const token = getAccessToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
         credentials: 'include',
         signal: options?.signal,
