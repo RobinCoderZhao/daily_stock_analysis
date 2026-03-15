@@ -595,10 +595,9 @@ class DatabaseManager:
                 session.commit()  # 如果需要
         """
         if not getattr(self, '_initialized', False) or not hasattr(self, '_SessionLocal'):
-            raise RuntimeError(
-                "DatabaseManager 未正确初始化。"
-                "请确保通过 DatabaseManager.get_instance() 获取实例。"
-            )
+            # Auto-initialize if not yet done (handles race conditions at startup)
+            logger.warning("DatabaseManager not yet initialized, performing lazy init")
+            self.__init__()
         session = self._SessionLocal()
         try:
             return session
