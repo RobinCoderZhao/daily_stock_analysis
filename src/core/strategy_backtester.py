@@ -27,8 +27,8 @@ from src.core.rule_evaluator import ConditionResult, EvaluationResult, RuleEvalu
 
 logger = logging.getLogger(__name__)
 
-# Minimum rows needed to compute indicators (MA60 needs 60 bars)
-_MIN_WARMUP_BARS = 60
+# Minimum rows needed to compute indicators (MA20 needs 20 bars; MA60 uses fallback)
+_MIN_WARMUP_BARS = 20
 
 
 @dataclass

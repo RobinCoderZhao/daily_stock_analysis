@@ -82,7 +82,7 @@ class StrategyBacktestService:
             for stock_code in codes:
                 try:
                     df = self._fetch_daily_data(stock_code)
-                    if df is None or len(df) < 80:
+                    if df is None or len(df) < 20:
                         continue
 
                     result = backtester.backtest_strategy(
@@ -148,24 +148,46 @@ class StrategyBacktestService:
             return [r[0] for r in rows if r[0]]
 
     def _fetch_daily_data(self, code: str):
-        """Fetch daily OHLCV data for backtesting.
-
-        Uses the existing data_fetcher to get historical data.
-        """
+        """Fetch daily OHLCV data for backtesting from local stock_daily table."""
         try:
-            from src.data_fetcher import DataFetcher
-            from src.config import get_config
+            import pandas as pd
+            from src.storage import StockDaily
 
-            config = get_config()
-            fetcher = DataFetcher(config)
-            df = fetcher.get_stock_data(code, period="1y")
-            if df is not None and not df.empty:
-                # Ensure required columns exist
+            with self.db.get_session() as session:
+                rows = (
+                    session.query(StockDaily)
+                    .filter(StockDaily.code == code)
+                    .order_by(StockDaily.date.asc())
+                    .all()
+                )
+                if not rows:
+                    logger.debug("No stock_daily data for %s", code)
+                    return None
+
+                records = []
+                for r in rows:
+                    records.append({
+                        "date": r.date,
+                        "open": r.open,
+                        "high": r.high,
+                        "low": r.low,
+                        "close": r.close,
+                        "volume": r.volume or 0,
+                    })
+                df = pd.DataFrame(records)
+                if df.empty:
+                    return None
+
+                # Ensure required columns are valid
                 required = {"close", "high", "low"}
-                if required.issubset(set(df.columns)):
-                    return df
+                if not required.issubset(set(df.columns)):
+                    return None
+                if df["close"].isnull().all():
+                    return None
+
+                return df
         except Exception as exc:
-            logger.debug("Failed to fetch data for %s: %s", code, exc)
+            logger.warning("Failed to fetch stock_daily for %s: %s", code, exc)
         return None
 
     def _save_signals(self, result: StrategyBacktestResult) -> None:
