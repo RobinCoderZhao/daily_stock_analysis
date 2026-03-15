@@ -563,7 +563,11 @@ class DatabaseManager:
             autoflush=False,
         )
         
-        # 创建所有表
+        # Ensure all model classes are imported so Base.metadata knows about them
+        import src.models.user  # noqa: F401 — User, Subscription, UserWatchlist
+        import src.models.payment  # noqa: F401 — PaymentOrder, UsageRecord
+
+        # Create all tables
         Base.metadata.create_all(self._engine)
 
         self._initialized = True
