@@ -42,12 +42,12 @@ def _get_user_id(request: Request) -> int:
 async def get_watchlist(request: Request, group: Optional[str] = None):
     """Get user's watchlist."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService
     service = WatchlistService()
@@ -59,12 +59,12 @@ async def get_watchlist(request: Request, group: Optional[str] = None):
 async def add_stock(request: Request, body: AddStockRequest):
     """Add stock to watchlist."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService, WatchlistServiceError
     try:
@@ -81,19 +81,19 @@ async def add_stock(request: Request, body: AddStockRequest):
         status = 409 if e.code == "already_exists" else 400
         if e.code == "quota_exceeded":
             status = 403
-        return JSONResponse(status, {"error": e.code, "message": str(e)})
+        return JSONResponse(status_code=status, content={"error": e.code, "message": str(e)})
 
 
 @router.delete("/{code}")
 async def remove_stock(request: Request, code: str):
     """Remove stock from watchlist."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService, WatchlistServiceError
     try:
@@ -101,19 +101,19 @@ async def remove_stock(request: Request, code: str):
         service.remove_stock(user_id, code)
         return {"ok": True}
     except WatchlistServiceError as e:
-        return JSONResponse(404, {"error": e.code, "message": str(e)})
+        return JSONResponse(status_code=404, content={"error": e.code, "message": str(e)})
 
 
 @router.get("/groups")
 async def get_groups(request: Request):
     """Get user's watchlist group names."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService
     service = WatchlistService()
@@ -125,12 +125,12 @@ async def get_groups(request: Request):
 async def reorder(request: Request, body: ReorderRequest):
     """Update sort order for stocks."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService
     service = WatchlistService()
@@ -142,12 +142,12 @@ async def reorder(request: Request, body: ReorderRequest):
 async def get_quota(request: Request):
     """Get user's watchlist quota info."""
     if not _is_saas_mode():
-        return JSONResponse(400, {"error": "saas_only"})
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
 
     try:
         user_id = _get_user_id(request)
     except ValueError:
-        return JSONResponse(401, {"error": "not_authenticated"})
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
 
     from src.services.watchlist_service import WatchlistService
     service = WatchlistService()
