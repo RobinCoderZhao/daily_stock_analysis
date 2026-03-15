@@ -43,7 +43,7 @@ class StrategyBacktestService:
 
         # Load strategies
         skill_manager = get_skill_manager()
-        all_skills = skill_manager.list_all()
+        all_skills = skill_manager.list_skills()
         backtestable = []
         for skill in all_skills:
             if skill.quantitative_rules is None:
