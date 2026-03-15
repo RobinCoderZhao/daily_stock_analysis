@@ -373,8 +373,7 @@ const SignalsPage: React.FC = () => {
           <h1 className="text-xl font-bold text-white tracking-tight">信号跟踪</h1>
           <p className="text-sm text-secondary mt-1">实时交易信号 · 策略回测排行</p>
         </div>
-        {activeTab === 'ranking' && (
-          <button
+        <button
             type="button"
             className="btn-primary text-sm"
             disabled={backtestRunning}
@@ -389,7 +388,6 @@ const SignalsPage: React.FC = () => {
               '启动策略回测'
             )}
           </button>
-        )}
       </div>
 
       {/* Error */}
