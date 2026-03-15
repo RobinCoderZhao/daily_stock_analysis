@@ -31,7 +31,7 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# Signal endpoints
+# Fixed-path endpoints MUST come before /{signal_id} to avoid interception
 # ---------------------------------------------------------------------------
 
 @router.get(
@@ -80,20 +80,21 @@ def get_signal_summary(
 
 
 @router.get(
-    "/{signal_id}",
-    response_model=SignalItem,
-    summary="Get signal detail",
-    responses={404: {"model": ErrorResponse}},
+    "/strategy-ranking",
+    response_model=StrategyRankingResponse,
+    summary="Get strategy performance ranking",
 )
-def get_signal_detail(
-    signal_id: int,
+def get_strategy_ranking(
     db_manager: DatabaseManager = Depends(get_database_manager),
-) -> SignalItem:
-    service = SignalService(db_manager)
-    data = service.get_signal_by_id(signal_id)
-    if data is None:
-        raise HTTPException(status_code=404, detail="Signal not found")
-    return SignalItem(**data)
+) -> StrategyRankingResponse:
+    try:
+        service = StrategyBacktestService(db_manager)
+        summaries = service.get_strategy_ranking()
+        items = [StrategyPerformanceItem(**s) for s in summaries]
+        return StrategyRankingResponse(strategies=items)
+    except Exception as exc:
+        logger.error("Failed to get strategy ranking: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post(
@@ -125,44 +126,6 @@ def create_signal(
 
 
 @router.post(
-    "/{signal_id}/close",
-    summary="Manually close a signal",
-    responses={404: {"model": ErrorResponse}},
-)
-def close_signal(
-    signal_id: int,
-    db_manager: DatabaseManager = Depends(get_database_manager),
-):
-    service = SignalService(db_manager)
-    ok = service.close_signal(signal_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Signal not found")
-    return {"message": "Signal closed", "signal_id": signal_id}
-
-
-# ---------------------------------------------------------------------------
-# Strategy backtest endpoints
-# ---------------------------------------------------------------------------
-
-@router.get(
-    "/strategy-ranking",
-    response_model=StrategyRankingResponse,
-    summary="Get strategy performance ranking",
-)
-def get_strategy_ranking(
-    db_manager: DatabaseManager = Depends(get_database_manager),
-) -> StrategyRankingResponse:
-    try:
-        service = StrategyBacktestService(db_manager)
-        summaries = service.get_strategy_ranking()
-        items = [StrategyPerformanceItem(**s) for s in summaries]
-        return StrategyRankingResponse(strategies=items)
-    except Exception as exc:
-        logger.error("Failed to get strategy ranking: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@router.post(
     "/strategy-backtest",
     response_model=StrategyBacktestRunResponse,
     summary="Run strategy-level backtest",
@@ -191,3 +154,40 @@ def run_strategy_backtest(
     except Exception as exc:
         logger.error("Strategy backtest failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Path-parameter endpoints MUST come LAST
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/{signal_id}",
+    response_model=SignalItem,
+    summary="Get signal detail",
+    responses={404: {"model": ErrorResponse}},
+)
+def get_signal_detail(
+    signal_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+) -> SignalItem:
+    service = SignalService(db_manager)
+    data = service.get_signal_by_id(signal_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return SignalItem(**data)
+
+
+@router.post(
+    "/{signal_id}/close",
+    summary="Manually close a signal",
+    responses={404: {"model": ErrorResponse}},
+)
+def close_signal(
+    signal_id: int,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+):
+    service = SignalService(db_manager)
+    ok = service.close_signal(signal_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return {"message": "Signal closed", "signal_id": signal_id}

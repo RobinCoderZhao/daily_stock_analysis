@@ -54,16 +54,9 @@ function directionBadge(direction: string) {
   }
 }
 
-// ============ Metric Row ============
-
-const MetricRow: React.FC<{ label: string; value: string; accent?: boolean }> = ({ label, value, accent }) => (
-  <div className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
-    <span className="text-xs text-secondary">{label}</span>
-    <span className={`text-sm font-mono font-semibold ${accent ? 'text-cyan' : 'text-white'}`}>{value}</span>
-  </div>
-);
 
 // ============ Summary Cards ============
+
 
 const SummaryCards: React.FC<{ summary: SignalSummary | null; loading: boolean }> = ({ summary, loading }) => {
   if (loading || !summary) {
@@ -445,10 +438,9 @@ const SignalsPage: React.FC = () => {
               {signalsTotal > signalsLimit && (
                 <div className="flex justify-center py-4 border-t border-white/5">
                   <Pagination
-                    current={signalsPage}
-                    total={signalsTotal}
-                    pageSize={signalsLimit}
-                    onChange={setSignalsPage}
+                    currentPage={signalsPage}
+                    totalPages={Math.ceil(signalsTotal / signalsLimit)}
+                    onPageChange={setSignalsPage}
                   />
                 </div>
               )}
