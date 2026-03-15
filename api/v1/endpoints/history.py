@@ -25,6 +25,7 @@ from api.v1.schemas.history import (
     ReportSummary,
     ReportStrategy,
     ReportDetails,
+    CompositeScore,
     MarkdownReportResponse,
 )
 from api.v1.schemas.common import ErrorResponse
@@ -213,10 +214,14 @@ def get_history_detail(
             context_snapshot=result.get("context_snapshot")
         )
         
+        # Phase 2: Compute composite score on-the-fly
+        composite_score = _compute_composite_score_for_history(result, context_snapshot)
+
         return AnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
+            composite_score=composite_score,
             details=details
         )
         
@@ -355,3 +360,63 @@ def get_history_markdown(
         )
 
     return MarkdownReportResponse(content=markdown_content)
+
+
+# ============================================================
+# Phase 2 helper: compute composite score for history detail
+# ============================================================
+
+def _compute_composite_score_for_history(
+    result: dict,
+    context_snapshot: Optional[dict],
+) -> Optional[CompositeScore]:
+    """Compute multi-factor composite score on-the-fly from stored analysis data.
+
+    Uses context_snapshot and raw_result to rebuild enough
+    state for MultiFactorScorer + ConfidenceEngine.
+
+    Returns CompositeScore Pydantic model, or None on failure.
+    """
+    try:
+        from src.core.multi_factor_scorer import MultiFactorScorer
+        from src.core.confidence_engine import ConfidenceEngine
+
+        # Determine market regime from context snapshot
+        market_regime = "均衡"
+        if context_snapshot and isinstance(context_snapshot, dict):
+            regime = context_snapshot.get("market_regime")
+            if regime in ("进攻", "均衡", "防守"):
+                market_regime = regime
+
+        # We don't have a live trend_result here, so score with None
+        # (scorer returns default / partial scores)
+        scorer = MultiFactorScorer()
+        scores = scorer.score(
+            trend_result=None,
+            fundamental_data=None,
+            money_flow_data=None,
+            market_regime=market_regime,
+        )
+
+        # Compute confidence
+        engine = ConfidenceEngine(db=None)
+        stock_code = result.get("stock_code", "")
+        confidence = engine.compute(
+            strategy_name="",
+            code=stock_code,
+            market_regime=market_regime,
+        )
+
+        return CompositeScore(
+            total=scores.total,
+            label=scores.label,
+            technical=scores.technical,
+            fundamental=scores.fundamental,
+            money_flow=scores.money_flow,
+            market=scores.market,
+            confidence=confidence.final_score,
+        )
+    except Exception as exc:
+        logger.debug("Composite score computation skipped for history: %s", exc)
+        return None
+

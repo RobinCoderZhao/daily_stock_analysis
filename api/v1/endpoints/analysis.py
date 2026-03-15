@@ -42,6 +42,8 @@ from api.v1.schemas.history import (
     ReportSummary,
     ReportStrategy,
     ReportDetails,
+    CompositeScore,
+    PositionAdvice,
 )
 from data_provider.base import canonical_stock_code
 from src.config import Config
@@ -465,6 +467,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     stop_loss=str(getattr(record, 'stop_loss', None)) if getattr(record, 'stop_loss', None) is not None else None,
                     take_profit=str(getattr(record, 'take_profit', None)) if getattr(record, 'take_profit', None) is not None else None,
                 ),
+                composite_score=_build_composite_score_from_record(record),
             ).model_dump()
             return TaskStatus(
                 task_id=task_id,
@@ -504,6 +507,22 @@ def get_analysis_status(task_id: str) -> TaskStatus:
 # 辅助函数
 # ============================================================
 
+def _build_composite_score_from_record(record) -> Optional[CompositeScore]:
+    """Build CompositeScore from a DB record if Phase 2 columns are populated."""
+    total = getattr(record, 'composite_score', None)
+    if total is None:
+        return None
+    return CompositeScore(
+        total=total,
+        label=getattr(record, 'composite_label', '') or '中性观望',
+        technical=getattr(record, 'technical_score', 0) or 0,
+        fundamental=getattr(record, 'fundamental_score', 0) or 0,
+        money_flow=getattr(record, 'money_flow_score', 0) or 0,
+        market=getattr(record, 'market_score', 0) or 0,
+        confidence=getattr(record, 'confidence_score', 0) or 0,
+    )
+
+
 def _build_analysis_report(
         report_data: Dict[str, Any],
         query_id: str,
@@ -526,6 +545,7 @@ def _build_analysis_report(
     summary_data = report_data.get("summary", {})
     strategy_data = report_data.get("strategy", {})
     details_data = report_data.get("details", {})
+    composite_data = report_data.get("composite_score")
 
     meta = ReportMeta(
         query_id=meta_data.get("query_id", query_id),
@@ -563,9 +583,23 @@ def _build_analysis_report(
             context_snapshot=None
         )
 
+    # Phase 2: Build CompositeScore from backend-computed data
+    composite_score = None
+    if composite_data and isinstance(composite_data, dict):
+        composite_score = CompositeScore(
+            total=composite_data.get("total", 0),
+            label=composite_data.get("label", "中性观望"),
+            technical=composite_data.get("technical", 0),
+            fundamental=composite_data.get("fundamental", 0),
+            money_flow=composite_data.get("money_flow", 0),
+            market=composite_data.get("market", 0),
+            confidence=composite_data.get("confidence", 0),
+        )
+
     return AnalysisReport(
         meta=meta,
         summary=summary,
         strategy=strategy,
+        composite_score=composite_score,
         details=details
     )

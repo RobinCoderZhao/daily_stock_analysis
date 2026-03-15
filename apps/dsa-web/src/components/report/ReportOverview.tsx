@@ -1,11 +1,13 @@
 import type React from 'react';
-import type { ReportMeta, ReportSummary as ReportSummaryType } from '../../types/analysis';
+import type { ReportMeta, ReportSummary as ReportSummaryType, CompositeScore } from '../../types/analysis';
 import { ScoreGauge, Card } from '../common';
+import { CompositeScoreGauge } from './CompositeScoreGauge';
 import { formatDateTime } from '../../utils/format';
 
 interface ReportOverviewProps {
   meta: ReportMeta;
   summary: ReportSummaryType;
+  compositeScore?: CompositeScore;
   isHistory?: boolean;
 }
 
@@ -14,7 +16,8 @@ interface ReportOverviewProps {
  */
 export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
-  summary
+  summary,
+  compositeScore,
 }) => {
   // 根据涨跌幅获取颜色
   const getPriceChangeColor = (changePct: number | undefined): string => {
@@ -31,12 +34,15 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
     return `${sign}${changePct.toFixed(2)}%`;
   };
 
+  // Determine if we show dual gauges
+  const hasDualGauge = !!compositeScore;
+
   return (
     <div className="space-y-4">
       {/* 主信息区 - 两列布局，items-stretch 确保右侧与左侧同高 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         {/* 左侧：股票信息与结论 */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={`${hasDualGauge ? 'lg:col-span-1' : 'lg:col-span-2'} space-y-4`}>
           {/* 股票头部 */}
           <Card variant="gradient" padding="md">
             <div className="flex items-start justify-between mb-4">
@@ -118,15 +124,35 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
           </div>
         </div>
 
-        {/* 右侧：情绪指标 - 填满格子高度，消除与 STRATEGY POINTS 之间的空隙 */}
-        <div className="flex flex-col self-stretch min-h-full">
-          <Card variant="bordered" padding="md" className="!overflow-visible flex-1 flex flex-col min-h-0">
-            <div className="text-center flex-1 flex flex-col justify-center">
-              <h3 className="text-sm font-medium text-white mb-4">Market Sentiment</h3>
-              <ScoreGauge score={summary.sentimentScore} size="lg" />
-            </div>
-          </Card>
-        </div>
+        {/* 右侧：评分指标 - dual gauge when composite available */}
+        {hasDualGauge ? (
+          <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 self-stretch">
+            {/* Sentiment gauge */}
+            <Card variant="bordered" padding="md" className="!overflow-visible flex flex-col">
+              <div className="text-center flex-1 flex flex-col justify-center">
+                <h3 className="text-sm font-medium text-white mb-4">Market Sentiment</h3>
+                <ScoreGauge score={summary.sentimentScore} size="md" />
+              </div>
+            </Card>
+
+            {/* Composite score gauge */}
+            <Card variant="bordered" padding="md" className="!overflow-visible flex flex-col">
+              <div className="text-center flex-1 flex flex-col justify-center">
+                <h3 className="text-sm font-medium text-white mb-2">Composite Score</h3>
+                <CompositeScoreGauge compositeScore={compositeScore} />
+              </div>
+            </Card>
+          </div>
+        ) : (
+          <div className="flex flex-col self-stretch min-h-full">
+            <Card variant="bordered" padding="md" className="!overflow-visible flex-1 flex flex-col min-h-0">
+              <div className="text-center flex-1 flex flex-col justify-center">
+                <h3 className="text-sm font-medium text-white mb-4">Market Sentiment</h3>
+                <ScoreGauge score={summary.sentimentScore} size="lg" />
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

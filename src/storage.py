@@ -214,6 +214,18 @@ class AnalysisHistory(Base):
     stop_loss = Column(Float)
     take_profit = Column(Float)
 
+    # Multi-factor composite score (Phase 2)
+    composite_score = Column(Float)         # 0-100
+    composite_label = Column(String(20))    # "强烈推荐" / "推荐买入" / ...
+    technical_score = Column(Float)         # 0-40
+    fundamental_score = Column(Float)       # 0-30
+    money_flow_score = Column(Float)        # 0-20
+    market_score = Column(Float)            # 0-10
+
+    # Position advice (Phase 2)
+    position_pct = Column(Float)            # suggested % of portfolio
+    confidence_score = Column(Float)        # 0-100 signal confidence
+
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
@@ -239,6 +251,14 @@ class AnalysisHistory(Base):
             'secondary_buy': self.secondary_buy,
             'stop_loss': self.stop_loss,
             'take_profit': self.take_profit,
+            'composite_score': self.composite_score,
+            'composite_label': self.composite_label,
+            'technical_score': self.technical_score,
+            'fundamental_score': self.fundamental_score,
+            'money_flow_score': self.money_flow_score,
+            'market_score': self.market_score,
+            'position_pct': self.position_pct,
+            'confidence_score': self.confidence_score,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 

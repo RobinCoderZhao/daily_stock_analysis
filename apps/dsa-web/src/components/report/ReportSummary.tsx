@@ -1,7 +1,7 @@
 import React from 'react';
 import type { AnalysisResult, AnalysisReport } from '../../types/analysis';
 import { ReportOverview } from './ReportOverview';
-import { ReportStrategy } from './ReportStrategy';
+import { PositionCard } from './PositionCard';
 import { ReportNews } from './ReportNews';
 import { ReportDetails } from './ReportDetails';
 
@@ -23,7 +23,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
   // 使用 report id，因为 queryId 在批量分析时可能重复，且历史报告详情接口需要 recordId 来获取关联资讯和详情数据
   const recordId = report.meta.id;
 
-  const { meta, summary, strategy, details } = report;
+  const { meta, summary, strategy, compositeScore, positionAdvice, details } = report;
   const modelUsed = (meta.modelUsed || '').trim();
   const shouldShowModel = Boolean(
     modelUsed && !['unknown', 'error', 'none', 'null', 'n/a'].includes(modelUsed.toLowerCase()),
@@ -35,11 +35,12 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
       <ReportOverview
         meta={meta}
         summary={summary}
+        compositeScore={compositeScore}
         isHistory={isHistory}
       />
 
-      {/* 策略点位区 */}
-      <ReportStrategy strategy={strategy} />
+      {/* 策略点位 + 仓位建议 */}
+      <PositionCard strategy={strategy} positionAdvice={positionAdvice} />
 
       {/* 资讯区 */}
       <ReportNews recordId={recordId} />

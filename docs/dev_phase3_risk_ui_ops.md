@@ -222,7 +222,9 @@ Runs every Sunday at 22:00:
 
 class StrategyBacktestSchedulerJob:
     def run(self):
-        service = StrategyBacktestService()
+        from src.storage import DatabaseManager
+        db = DatabaseManager.get_instance()  # auto-initializes if needed
+        service = StrategyBacktestService(db)
         results = service.run_strategy_backtest(limit_stocks=30)
         service.update_confidence_weights()
         return results
@@ -251,7 +253,7 @@ scheduler.add_job(
 
 #### [MODIFY] `apps/dsa-web/src/pages/SignalsPage.tsx`
 
-Phase 1 中创建了基础结构，Phase 3 补全：
+Phase 1 中创建了基础结构（3 tabs + 回测按钮 + 成功提示横幅 + 自动切Tab），Phase 3 补全：
 
 - **策略排行组件** (`StrategyRanking.tsx`)
   - 复用 `Card` + 内嵌进度条

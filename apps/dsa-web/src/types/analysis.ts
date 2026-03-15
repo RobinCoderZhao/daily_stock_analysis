@@ -47,6 +47,25 @@ export interface ReportStrategy {
   takeProfit?: string;
 }
 
+/** Multi-factor composite score (Phase 2) */
+export interface CompositeScore {
+  total: number;        // 0-100
+  label: string;        // "强烈推荐" / "推荐买入" / "可以关注" / "中性观望" / "建议回避"
+  technical: number;    // 0-40
+  fundamental: number;  // 0-30
+  moneyFlow: number;    // 0-20
+  market: number;       // 0-10
+  confidence: number;   // 0-100
+}
+
+/** Position sizing recommendation (Phase 2) */
+export interface PositionAdvice {
+  positionPct: number;       // suggested % of portfolio
+  riskAmount: number;        // max risk in currency
+  profitLossRatio: string;   // e.g. "1:2.5"
+  confidence: number;        // 0-100
+}
+
 /** 详情区（可折叠） */
 export interface ReportDetails {
   newsContent?: string;
@@ -59,6 +78,8 @@ export interface AnalysisReport {
   meta: ReportMeta;
   summary: ReportSummary;
   strategy?: ReportStrategy;
+  compositeScore?: CompositeScore;
+  positionAdvice?: PositionAdvice;
   details?: ReportDetails;
 }
 

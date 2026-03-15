@@ -2,6 +2,11 @@
 
 > 本阶段目标：将 Phase 1 的回测数据转化为可操作的交易建议（置信度 + 仓位 + 综合评分）。
 > 前置依赖：Phase 1 全部完成（策略回测产出数据 + 信号跟踪表可用）
+>
+> **Phase 1 变更备注**：
+> - `DatabaseManager.get_session()` 已改为懒初始化（无需担心启动时序）
+> - `_fetch_daily_data` 优先使用本地 `stock_daily` 表，有 Tushare token 时走 API
+> - 前端构建已修复 `vite.config.ts` 使用 `loadEnv()` 读取 `.env.production`，直接 `npm run build` 即可
 > 预计工期：3-4 周
 
 ---
@@ -468,6 +473,7 @@ python -m pytest tests/ -x --timeout=60
 ### 6.3 前端构建
 
 ```bash
+# vite.config.ts 已使用 loadEnv() 读取 .env.production，无需手动设置环境变量
 cd apps/dsa-web && npm run build
 # Verify no TS errors and components render correctly
 ```

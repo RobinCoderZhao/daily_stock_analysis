@@ -137,6 +137,33 @@ class ReportStrategy(BaseModel):
     take_profit: Optional[str] = Field(None, description="止盈价")
 
 
+class CompositeScore(BaseModel):
+    """Multi-factor composite score (Phase 2)."""
+
+    total: float = Field(..., description="Composite score 0-100")
+    label: str = Field(..., description="Score label: 强烈推荐/推荐买入/可以关注/中性观望/建议回避")
+    technical: float = Field(..., description="Technical factor score 0-40")
+    fundamental: float = Field(..., description="Fundamental factor score 0-30")
+    money_flow: float = Field(0, alias="moneyFlow", description="Money flow factor score 0-20")
+    market: float = Field(..., description="Market environment score 0-10")
+    confidence: float = Field(..., description="Signal confidence 0-100")
+
+    class Config:
+        populate_by_name = True
+
+
+class PositionAdvice(BaseModel):
+    """Position sizing recommendation (Phase 2)."""
+
+    position_pct: float = Field(0, alias="positionPct", description="Suggested position % of portfolio")
+    risk_amount: float = Field(0, alias="riskAmount", description="Max risk amount in currency")
+    profit_loss_ratio: str = Field("N/A", alias="profitLossRatio", description="e.g. 1:2.5")
+    confidence: float = Field(0, description="Signal confidence 0-100")
+
+    class Config:
+        populate_by_name = True
+
+
 class ReportDetails(BaseModel):
     """报告详情区"""
     
@@ -151,6 +178,8 @@ class AnalysisReport(BaseModel):
     meta: ReportMeta = Field(..., description="元信息")
     summary: ReportSummary = Field(..., description="概览区")
     strategy: Optional[ReportStrategy] = Field(None, description="策略点位区")
+    composite_score: Optional[CompositeScore] = Field(None, description="综合评分 (Phase 2)")
+    position_advice: Optional[PositionAdvice] = Field(None, description="仓位建议 (Phase 2)")
     details: Optional[ReportDetails] = Field(None, description="详情区")
 
     class Config:

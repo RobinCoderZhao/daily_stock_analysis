@@ -123,6 +123,9 @@ class AnalysisService:
         
         # 计算情绪标签
         sentiment_label = self._get_sentiment_label(result.sentiment_score)
+
+        # Phase 2: Compute multi-factor composite score
+        composite_score_data = self._compute_composite_score(result)
         
         # 构建报告结构
         report = {
@@ -148,6 +151,7 @@ class AnalysisService:
                 "stop_loss": sniper_points.get("stop_loss"),
                 "take_profit": sniper_points.get("take_profit"),
             },
+            "composite_score": composite_score_data,
             "details": {
                 "news_summary": result.news_summary,
                 "technical_analysis": result.technical_analysis,
@@ -161,6 +165,57 @@ class AnalysisService:
             "stock_name": result.name,
             "report": report,
         }
+
+    def _compute_composite_score(self, result: Any) -> Optional[Dict[str, Any]]:
+        """Compute multi-factor composite score from analysis result.
+
+        Returns dict with score breakdown, or None if scoring unavailable.
+        """
+        try:
+            from src.core.multi_factor_scorer import MultiFactorScorer
+            from src.core.confidence_engine import ConfidenceEngine
+
+            # Get trend_result if available
+            trend_result = getattr(result, 'trend_result', None)
+
+            # Determine market regime from context
+            market_regime = "均衡"  # default
+            context = getattr(result, 'context_snapshot', None)
+            if context and isinstance(context, dict):
+                regime = context.get('market_regime')
+                if regime in ("进攻", "均衡", "防守"):
+                    market_regime = regime
+
+            # Compute multi-factor score
+            scorer = MultiFactorScorer()
+            scores = scorer.score(
+                trend_result=trend_result,
+                fundamental_data=None,   # future: Tushare data
+                money_flow_data=None,    # future: Tushare data
+                market_regime=market_regime,
+            )
+
+            # Compute confidence
+            engine = ConfidenceEngine(db=None)
+            strategy_name = getattr(result, 'strategy_name', '') or ''
+            confidence = engine.compute(
+                strategy_name=strategy_name,
+                code=result.code,
+                market_regime=market_regime,
+            )
+
+            return {
+                "total": scores.total,
+                "label": scores.label,
+                "technical": scores.technical,
+                "fundamental": scores.fundamental,
+                "money_flow": scores.money_flow,
+                "market": scores.market,
+                "confidence": confidence.final_score,
+            }
+        except Exception as exc:
+            logger.debug("Composite score computation skipped: %s", exc)
+            return None
     
     def _get_sentiment_label(self, score: int) -> str:
         """
