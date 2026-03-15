@@ -148,7 +148,42 @@ class StrategyBacktestService:
             return [r[0] for r in rows if r[0]]
 
     def _fetch_daily_data(self, code: str):
-        """Fetch daily OHLCV data for backtesting from local stock_daily table."""
+        """Fetch daily OHLCV data for backtesting.
+
+        Strategy:
+        - If Tushare token is configured, try the external API first.
+        - Otherwise (or on API failure), fall back to local stock_daily table.
+        """
+        from src.config import get_config
+        config = get_config()
+
+        # Try API if Tushare token is available
+        tushare_token = getattr(config, "tushare_token", None) or ""
+        if tushare_token.strip():
+            df = self._fetch_from_api(code, config)
+            if df is not None:
+                return df
+            logger.debug("API fetch failed for %s, falling back to local DB", code)
+
+        # Fall back to local stock_daily table
+        return self._fetch_from_local_db(code)
+
+    def _fetch_from_api(self, code: str, config):
+        """Fetch daily data via DataFetcher (external API)."""
+        try:
+            from src.data_fetcher import DataFetcher
+            fetcher = DataFetcher(config)
+            df = fetcher.get_stock_data(code, period="1y")
+            if df is not None and not df.empty:
+                required = {"close", "high", "low"}
+                if required.issubset(set(df.columns)):
+                    return df
+        except Exception as exc:
+            logger.debug("DataFetcher error for %s: %s", code, exc)
+        return None
+
+    def _fetch_from_local_db(self, code: str):
+        """Fetch daily data from local stock_daily table."""
         try:
             import pandas as pd
             from src.storage import StockDaily
@@ -178,7 +213,6 @@ class StrategyBacktestService:
                 if df.empty:
                     return None
 
-                # Ensure required columns are valid
                 required = {"close", "high", "low"}
                 if not required.issubset(set(df.columns)):
                     return None
