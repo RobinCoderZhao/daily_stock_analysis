@@ -271,6 +271,9 @@ const SignalsPage: React.FC = () => {
   // Strategy backtest running
   const [backtestRunning, setBacktestRunning] = useState(false);
 
+  // Backtest result message
+  const [backtestMessage, setBacktestMessage] = useState<string | null>(null);
+
   // Error
   const [error, setError] = useState<ParsedApiError | null>(null);
 
@@ -335,9 +338,14 @@ const SignalsPage: React.FC = () => {
   const handleRunBacktest = useCallback(async () => {
     setBacktestRunning(true);
     setError(null);
+    setBacktestMessage(null);
     try {
-      await signalsApi.runStrategyBacktest({});
+      const result = await signalsApi.runStrategyBacktest({});
       await fetchRanking();
+      setActiveTab('ranking');
+      const tested = result.strategiesTested ?? 0;
+      const withSignals = (result.results ?? []).filter((r: any) => r.totalSignals > 0).length;
+      setBacktestMessage(`回测完成：${tested} 个策略已测试，${withSignals} 个策略产生了有效信号`);
     } catch (err) {
       setError(getParsedApiError(err));
     } finally {
@@ -393,6 +401,19 @@ const SignalsPage: React.FC = () => {
       {/* Error */}
       {error && (
         <ApiErrorAlert error={error} />
+      )}
+
+      {/* Backtest success message */}
+      {backtestMessage && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+          <span className="text-emerald-400 text-sm">✓</span>
+          <span className="text-emerald-300 text-sm">{backtestMessage}</span>
+          <button
+            type="button"
+            className="ml-auto text-emerald-400/60 hover:text-emerald-300 text-sm"
+            onClick={() => setBacktestMessage(null)}
+          >×</button>
+        </div>
       )}
 
       {/* Summary cards */}
