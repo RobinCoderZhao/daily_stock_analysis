@@ -152,3 +152,59 @@ async def get_quota(request: Request):
     from src.services.watchlist_service import WatchlistService
     service = WatchlistService()
     return service.get_quota_info(user_id)
+
+
+@router.get("/enriched")
+async def get_enriched_watchlist(request: Request):
+    """Get watchlist enriched with latest analysis scores and stock info."""
+    if not _is_saas_mode():
+        return JSONResponse(status_code=400, content={"error": "saas_only"})
+
+    try:
+        user_id = _get_user_id(request)
+    except ValueError:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+
+    from src.services.watchlist_service import WatchlistService
+    service = WatchlistService()
+    items = service.get_watchlist(user_id)
+
+    if not items:
+        return {"items": [], "count": 0}
+
+    # Enrich each item with latest analysis data from global analysis_history
+    from src.storage import DatabaseManager
+    db = DatabaseManager.get_instance()
+    enriched = []
+    for item in items:
+        code = item["code"]
+        # Get the most recent analysis for this stock (global, not per-user)
+        records = db.get_analysis_history(code=code, days=90, limit=1)
+        latest = records[0] if records else None
+
+        enriched.append({
+            "id": item["id"],
+            "code": code,
+            "name": item.get("name") or (latest.name if latest else code),
+            "group": item.get("group", "默认分组"),
+            "market": item.get("market", "cn"),
+            "sort_order": item.get("sort_order", 0),
+            "added_at": item.get("added_at"),
+            # Analysis data (from most recent analysis)
+            "sentiment_score": latest.sentiment_score if latest else None,
+            "composite_score": latest.composite_score if latest else None,
+            "composite_label": latest.composite_label if latest else None,
+            "operation_advice": latest.operation_advice if latest else None,
+            "analysis_summary": latest.analysis_summary if latest else None,
+            "analysis_date": latest.created_at.isoformat() if latest and latest.created_at else None,
+            "query_id": latest.query_id if latest else None,
+            # Score breakdown
+            "technical_score": latest.technical_score if latest else None,
+            "fundamental_score": latest.fundamental_score if latest else None,
+            "money_flow_score": latest.money_flow_score if latest else None,
+            "market_score": latest.market_score if latest else None,
+            "confidence_score": latest.confidence_score if latest else None,
+            "trend_prediction": latest.trend_prediction if latest else None,
+        })
+
+    return {"items": enriched, "count": len(enriched)}

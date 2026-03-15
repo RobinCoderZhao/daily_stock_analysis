@@ -113,6 +113,9 @@ class UserService:
 
             logger.info(f"New user registered: id={user.id}, email={email}")
 
+            # Add default watchlist stocks for new users
+            self._add_default_watchlist(user.id)
+
             # Generate JWT tokens
             access_token = create_access_token(user.id, user.role)
             refresh_token = create_refresh_token(user.id)
@@ -127,6 +130,27 @@ class UserService:
                 "access_token": access_token,
                 "refresh_token": refresh_token,
             }
+
+    def _add_default_watchlist(self, user_id: int) -> None:
+        """Add default stocks to a new user's watchlist.
+
+        Runs silently — failures here must not block registration.
+        """
+        default_stocks = [
+            ("600519", "贵州茅台"),
+            ("002594", "比亚迪"),
+        ]
+        try:
+            from src.services.watchlist_service import WatchlistService
+            ws = WatchlistService(self._db)
+            for code, name in default_stocks:
+                try:
+                    ws.add_stock(user_id=user_id, code=code, name=name)
+                except Exception:
+                    pass  # already exists or quota — skip silently
+            logger.info(f"Added default watchlist stocks for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to add default watchlist for user {user_id}: {e}")
 
     def login(self, email: str, password: str) -> Dict[str, Any]:
         """Authenticate user and return JWT tokens."""

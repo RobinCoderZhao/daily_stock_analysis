@@ -10,14 +10,40 @@ export type WatchlistItem = {
   added_at: string;
 };
 
+export type EnrichedWatchlistItem = WatchlistItem & {
+  sentiment_score: number | null;
+  composite_score: number | null;
+  composite_label: string | null;
+  operation_advice: string | null;
+  analysis_summary: string | null;
+  analysis_date: string | null;
+  query_id: string | null;
+  technical_score: number | null;
+  fundamental_score: number | null;
+  money_flow_score: number | null;
+  market_score: number | null;
+  confidence_score: number | null;
+  trend_prediction: string | null;
+};
+
 export type WatchlistResponse = {
   items: WatchlistItem[];
+  count: number;
+};
+
+export type EnrichedWatchlistResponse = {
+  items: EnrichedWatchlistItem[];
   count: number;
 };
 
 export const watchlistApi = {
   async getList(): Promise<WatchlistResponse> {
     const { data } = await apiClient.get<WatchlistResponse>('/api/v1/watchlist/');
+    return data;
+  },
+
+  async getEnrichedList(): Promise<EnrichedWatchlistResponse> {
+    const { data } = await apiClient.get<EnrichedWatchlistResponse>('/api/v1/watchlist/enriched');
     return data;
   },
 
