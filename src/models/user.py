@@ -47,6 +47,9 @@ class Subscription(Base):
     status = Column(String(20), nullable=False, default="active")
     # status: active / expired / cancelled
     watchlist_limit = Column(Integer, nullable=False, default=3)
+    daily_analysis_limit = Column(Integer, nullable=True)  # null = unlimited
+    agent_daily_limit = Column(Integer, nullable=True, default=0)
+    temp_analysis_credits = Column(Integer, nullable=True, default=0)
     start_at = Column(DateTime, default=datetime.now)
     expire_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)

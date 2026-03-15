@@ -5,10 +5,8 @@ import { watchlistApi, type WatchlistItem } from '../api/watchlist';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert } from '../components/common';
 import { validateStockCode } from '../utils/validation';
-import { useAuth } from '../hooks';
 
 const WatchlistPage: React.FC = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [limit, setLimit] = useState(3);
@@ -22,10 +20,13 @@ const WatchlistPage: React.FC = () => {
   const fetchList = useCallback(async () => {
     try {
       setIsLoading(true);
-      const res = await watchlistApi.getList();
-      setItems(res.watchlist);
-      setLimit(res.limit);
-      setUsed(res.used);
+      const [listRes, quotaRes] = await Promise.all([
+        watchlistApi.getList(),
+        watchlistApi.getQuota(),
+      ]);
+      setItems(listRes.items);
+      setLimit(quotaRes.limit);
+      setUsed(quotaRes.used);
       setError(null);
     } catch (err) {
       setError(getParsedApiError(err));
@@ -132,21 +133,21 @@ const WatchlistPage: React.FC = () => {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
             <div
-              key={item.stock_code}
+              key={item.code}
               className="group rounded-2xl border border-white/8 bg-card/60 p-4 backdrop-blur-sm transition hover:border-white/16"
             >
               <div className="flex items-start justify-between">
                 <button
                   type="button"
-                  onClick={() => navigate(`/?stock=${item.stock_code}`)}
+                  onClick={() => navigate(`/?stock=${item.code}`)}
                   className="text-left"
                 >
-                  <h3 className="text-sm font-semibold text-white">{item.stock_code}</h3>
-                  <p className="text-xs text-secondary">{item.stock_name || '—'}</p>
+                  <h3 className="text-sm font-semibold text-white">{item.code}</h3>
+                  <p className="text-xs text-secondary">{item.name || '—'}</p>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleRemove(item.stock_code)}
+                  onClick={() => handleRemove(item.code)}
                   className="rounded-lg p-1.5 text-muted opacity-0 transition hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
                   title="移除"
                 >
@@ -155,20 +156,7 @@ const WatchlistPage: React.FC = () => {
                   </svg>
                 </button>
               </div>
-              {item.composite_score !== undefined && (
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 rounded-full bg-white/5">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan to-emerald-400"
-                      style={{ width: `${Math.min(100, Math.max(0, item.composite_score))}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-cyan">{item.composite_score}</span>
-                </div>
-              )}
-              {item.latest_analysis_at && (
-                <p className="mt-2 text-xs text-muted">最近分析: {item.latest_analysis_at}</p>
-              )}
+              <p className="mt-2 text-xs text-muted">添加时间: {item.added_at?.split('T')[0]}</p>
             </div>
           ))}
         </div>
