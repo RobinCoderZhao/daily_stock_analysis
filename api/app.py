@@ -117,15 +117,20 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    add_auth_middleware(app)
+    # Starlette middleware uses LIFO order: last-registered executes first.
+    # Desired execution order: Auth → Quota → Admin → handler
+    # So register in reverse: Admin first, Quota second, Auth last.
 
-    # SaaS quota enforcement (after auth, so user_id is available)
+    # Admin role enforcement (runs 3rd in request chain)
+    from api.middlewares.admin import add_admin_middleware
+    add_admin_middleware(app)
+
+    # SaaS quota enforcement (runs 2nd, after auth sets user_id)
     from api.middlewares.quota import add_quota_middleware
     add_quota_middleware(app)
 
-    # Admin role enforcement (after auth + quota)
-    from api.middlewares.admin import add_admin_middleware
-    add_admin_middleware(app)
+    # Auth middleware (runs 1st — must be last-registered for LIFO)
+    add_auth_middleware(app)
 
     # Security warning: auth disabled + listening on 0.0.0.0
     _host = os.environ.get("WEBUI_HOST", "127.0.0.1")
