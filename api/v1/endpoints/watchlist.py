@@ -181,11 +181,18 @@ async def get_enriched_watchlist(request: Request):
         # Get the most recent analysis for this stock (global, not per-user)
         records = db.get_analysis_history(code=code, days=90, limit=1)
         latest = records[0] if records else None
+        # Prefer analysis_history name (rich name like "比亚迪") over watchlist
+        # name which often stores the bare code (e.g. "002594").
+        wl_name = item.get("name") or ""
+        analysis_name = latest.name if latest and latest.name else ""
+        # Use analysis name first; fall back to watchlist name only if it
+        # looks like a real name (contains non-ASCII / non-digit chars).
+        resolved_name = analysis_name or (wl_name if wl_name != code else "") or code
 
         enriched.append({
             "id": item["id"],
             "code": code,
-            "name": item.get("name") or (latest.name if latest else code),
+            "name": resolved_name,
             "group": item.get("group", "默认分组"),
             "market": item.get("market", "cn"),
             "sort_order": item.get("sort_order", 0),
