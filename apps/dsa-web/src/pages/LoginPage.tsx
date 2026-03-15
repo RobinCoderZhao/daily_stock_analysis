@@ -8,53 +8,149 @@ import { useAuth } from '../hooks';
 import { SettingsAlert } from '../components/settings';
 
 const LoginPage: React.FC = () => {
-  const { login, passwordSet } = useAuth();
+  const { login, saasLogin, saasRegister, passwordSet, saasMode } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const rawRedirect = searchParams.get('redirect') ?? '';
   const redirect =
     rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/';
 
+  // Form state
+  const [email, setEmail] = useState('');
+  const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | ParsedApiError | null>(null);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
 
-  const isFirstTime = !passwordSet;
+  // Legacy admin mode: first-time password setup
+  const isFirstTime = !saasMode && !passwordSet;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (isFirstTime && password !== passwordConfirm) {
-      setError('两次输入的密码不一致');
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      const result = await login(password, isFirstTime ? passwordConfirm : undefined);
-      if (result.success) {
-        navigate(redirect, { replace: true });
-      } else {
-        setError(result.error ?? '登录失败');
+
+    if (saasMode) {
+      // SaaS mode: email + password login/register
+      if (!email.trim()) {
+        setError('请输入邮箱');
+        return;
       }
-    } finally {
-      setIsSubmitting(false);
+      if (!password.trim()) {
+        setError('请输入密码');
+        return;
+      }
+      if (isRegisterMode && password !== passwordConfirm) {
+        setError('两次输入的密码不一致');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const result = isRegisterMode
+          ? await saasRegister(email, password, nickname || undefined)
+          : await saasLogin(email, password);
+
+        if (result.success) {
+          navigate(redirect, { replace: true });
+        } else {
+          setError(result.error ?? '操作失败');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      // Legacy admin mode
+      if (isFirstTime && password !== passwordConfirm) {
+        setError('两次输入的密码不一致');
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        const result = await login(password, isFirstTime ? passwordConfirm : undefined);
+        if (result.success) {
+          navigate(redirect, { replace: true });
+        } else {
+          setError(result.error ?? '登录失败');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
     }
+  };
+
+  const toggleMode = () => {
+    setIsRegisterMode(!isRegisterMode);
+    setError(null);
+  };
+
+  // Page titles
+  const getTitle = () => {
+    if (saasMode) return isRegisterMode ? '创建账号' : '用户登录';
+    return isFirstTime ? '设置初始密码' : '管理员登录';
+  };
+
+  const getSubtitle = () => {
+    if (saasMode) {
+      return isRegisterMode
+        ? '注册后享受 7 天免费试用'
+        : '请输入邮箱和密码登录';
+    }
+    return isFirstTime ? '请设置管理员密码，输入两遍确认' : '请输入密码以继续访问';
   };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-base px-4">
       <div className="w-full max-w-sm rounded-2xl border border-white/8 bg-card/80 p-6 backdrop-blur-sm">
         <h1 className="mb-2 text-xl font-semibold text-white">
-          {isFirstTime ? '设置初始密码' : '管理员登录'}
+          {getTitle()}
         </h1>
         <p className="mb-6 text-sm text-secondary">
-          {isFirstTime
-            ? '请设置管理员密码，输入两遍确认'
-            : '请输入密码以继续访问'}
+          {getSubtitle()}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email field (SaaS mode only) */}
+          {saasMode ? (
+            <div>
+              <label htmlFor="email" className="mb-1 block text-sm font-medium text-secondary">
+                邮箱
+              </label>
+              <input
+                id="email"
+                type="email"
+                className="input-terminal"
+                placeholder="your@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isSubmitting}
+                autoFocus
+                autoComplete="email"
+              />
+            </div>
+          ) : null}
+
+          {/* Nickname (SaaS register only) */}
+          {saasMode && isRegisterMode ? (
+            <div>
+              <label htmlFor="nickname" className="mb-1 block text-sm font-medium text-secondary">
+                昵称（可选）
+              </label>
+              <input
+                id="nickname"
+                type="text"
+                className="input-terminal"
+                placeholder="您的昵称"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                disabled={isSubmitting}
+                autoComplete="nickname"
+              />
+            </div>
+          ) : null}
+
+          {/* Password */}
           <div>
             <label htmlFor="password" className="mb-1 block text-sm font-medium text-secondary">
               {isFirstTime ? '新密码' : '密码'}
@@ -67,12 +163,13 @@ const LoginPage: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={isSubmitting}
-              autoFocus
-              autoComplete={isFirstTime ? 'new-password' : 'current-password'}
+              autoFocus={!saasMode}
+              autoComplete={isFirstTime || isRegisterMode ? 'new-password' : 'current-password'}
             />
           </div>
 
-          {isFirstTime ? (
+          {/* Confirm password (register or first-time) */}
+          {isFirstTime || (saasMode && isRegisterMode) ? (
             <div>
               <label
                 htmlFor="passwordConfirm"
@@ -93,12 +190,13 @@ const LoginPage: React.FC = () => {
             </div>
           ) : null}
 
+          {/* Error display */}
           {error
             ? isParsedApiError(error)
               ? <ApiErrorAlert error={error} className="!mt-3" />
               : (
                 <SettingsAlert
-                  title={isFirstTime ? '设置失败' : '登录失败'}
+                  title={isRegisterMode ? '注册失败' : '登录失败'}
                   message={error}
                   variant="error"
                   className="!mt-3"
@@ -106,13 +204,29 @@ const LoginPage: React.FC = () => {
               )
             : null}
 
+          {/* Submit button */}
           <button
             type="submit"
             className="btn-primary w-full"
             disabled={isSubmitting}
           >
-            {isSubmitting ? (isFirstTime ? '设置中...' : '登录中...') : isFirstTime ? '设置密码' : '登录'}
+            {isSubmitting
+              ? (isRegisterMode ? '注册中...' : isFirstTime ? '设置中...' : '登录中...')
+              : (isRegisterMode ? '注册' : isFirstTime ? '设置密码' : '登录')}
           </button>
+
+          {/* Toggle register/login (SaaS mode only) */}
+          {saasMode ? (
+            <div className="text-center">
+              <button
+                type="button"
+                className="text-sm text-accent hover:text-accent/80 transition-colors"
+                onClick={toggleMode}
+              >
+                {isRegisterMode ? '已有账号？去登录' : '没有账号？立即注册'}
+              </button>
+            </div>
+          ) : null}
         </form>
       </div>
     </div>

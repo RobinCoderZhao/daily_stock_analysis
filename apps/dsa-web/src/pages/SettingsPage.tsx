@@ -1,5 +1,6 @@
 import type React from 'react';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, useSystemConfig } from '../hooks';
 import { ApiErrorAlert } from '../components/common';
 import {
@@ -13,7 +14,16 @@ import {
 import { getCategoryDescriptionZh, getCategoryTitleZh } from '../utils/systemConfigI18n';
 
 const SettingsPage: React.FC = () => {
-  const { passwordChangeable } = useAuth();
+  const { passwordChangeable, saasMode, user } = useAuth();
+  const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
+  // SaaS mode: redirect normal users to profile page
+  useEffect(() => {
+    if (saasMode && !isAdmin) {
+      navigate('/profile', { replace: true });
+    }
+  }, [saasMode, isAdmin, navigate]);
   const {
     categories,
     itemsByCategory,

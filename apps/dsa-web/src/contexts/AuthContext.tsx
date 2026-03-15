@@ -1,23 +1,37 @@
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
-import { authApi } from '../api/auth';
+import { authApi, type SaasLoginResponse, type SaasProfileResponse } from '../api/auth';
+import { setAccessToken, getAccessToken } from '../api/index';
 
 type AuthContextValue = {
+  // Common
   authEnabled: boolean;
   loggedIn: boolean;
-  passwordSet: boolean;
-  passwordChangeable: boolean;
   isLoading: boolean;
   loadError: ParsedApiError | null;
+  logout: () => Promise<void>;
+  refreshStatus: () => Promise<void>;
+
+  // Legacy admin mode
+  passwordSet: boolean;
+  passwordChangeable: boolean;
   login: (password: string, passwordConfirm?: string) => Promise<{ success: boolean; error?: ParsedApiError }>;
   changePassword: (
     currentPassword: string,
     newPassword: string,
     newPasswordConfirm: string
   ) => Promise<{ success: boolean; error?: ParsedApiError }>;
-  logout: () => Promise<void>;
-  refreshStatus: () => Promise<void>;
+
+  // SaaS mode
+  saasMode: boolean;
+  user: SaasProfileResponse | null;
+  saasLogin: (email: string, password: string) => Promise<{ success: boolean; error?: ParsedApiError }>;
+  saasRegister: (
+    email: string,
+    password: string,
+    nickname?: string
+  ) => Promise<{ success: boolean; error?: ParsedApiError }>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -36,6 +50,9 @@ function extractLoginError(err: unknown): ParsedApiError {
   return parsed;
 }
 
+// Auto-refresh access token every 12 minutes (token expires in 15 min)
+const TOKEN_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authEnabled, setAuthEnabled] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -43,6 +60,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [passwordChangeable, setPasswordChangeable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<ParsedApiError | null>(null);
+  const [saasMode, setSaasMode] = useState(false);
+  const [user, setUser] = useState<SaasProfileResponse | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start periodic token refresh
+  const startTokenRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
+    refreshTimerRef.current = setInterval(async () => {
+      if (!getAccessToken()) return;
+      try {
+        const result = await authApi.refreshToken();
+        setAccessToken(result.access_token);
+      } catch {
+        // Token refresh failed — force re-login
+        setAccessToken(null);
+        setLoggedIn(false);
+        setUser(null);
+      }
+    }, TOKEN_REFRESH_INTERVAL_MS);
+  }, []);
+
+  const stopTokenRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearInterval(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     setIsLoading(true);
@@ -53,6 +97,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoggedIn(status.loggedIn);
       setPasswordSet(status.passwordSet ?? false);
       setPasswordChangeable(status.passwordChangeable ?? false);
+      setSaasMode(status.saasMode ?? false);
+
+      // If SaaS mode and we have a token, try to load profile
+      if (status.saasMode && getAccessToken()) {
+        try {
+          const profile = await authApi.getProfile();
+          setUser(profile);
+          setLoggedIn(true);
+        } catch {
+          // Token might be expired
+          setAccessToken(null);
+          setLoggedIn(false);
+        }
+      }
     } catch (err) {
       setLoadError(getParsedApiError(err));
       setAuthEnabled(false);
@@ -66,8 +124,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void fetchStatus();
-  }, [fetchStatus]);
+    return () => stopTokenRefresh();
+  }, [fetchStatus, stopTokenRefresh]);
 
+  // Handle SaaS login response common logic
+  const handleSaasAuth = useCallback(
+    (result: SaasLoginResponse) => {
+      setAccessToken(result.access_token);
+      setLoggedIn(true);
+      setUser({
+        user_id: result.user_id,
+        uuid: '',
+        email: result.email,
+        nickname: result.nickname,
+        role: result.role,
+        tier: result.tier,
+        watchlist_limit: 3,
+      });
+      startTokenRefresh();
+    },
+    [startTokenRefresh]
+  );
+
+  // Legacy admin login
   const login = useCallback(
     async (
       password: string,
@@ -82,6 +161,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     },
     []
+  );
+
+  // SaaS login
+  const saasLogin = useCallback(
+    async (email: string, password: string): Promise<{ success: boolean; error?: ParsedApiError }> => {
+      try {
+        const result = await authApi.saasLogin(email, password);
+        handleSaasAuth(result);
+        return { success: true };
+      } catch (err: unknown) {
+        return { success: false, error: extractLoginError(err) };
+      }
+    },
+    [handleSaasAuth]
+  );
+
+  // SaaS register
+  const saasRegister = useCallback(
+    async (
+      email: string,
+      password: string,
+      nickname?: string
+    ): Promise<{ success: boolean; error?: ParsedApiError }> => {
+      try {
+        const result = await authApi.register(email, password, nickname);
+        handleSaasAuth(result);
+        return { success: true };
+      } catch (err: unknown) {
+        return { success: false, error: extractLoginError(err) };
+      }
+    },
+    [handleSaasAuth]
   );
 
   const changePassword = useCallback(
@@ -104,9 +215,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.logout();
     } finally {
+      setAccessToken(null);
       setLoggedIn(false);
+      setUser(null);
+      stopTokenRefresh();
     }
-  }, []);
+  }, [stopTokenRefresh]);
 
   return (
     <AuthContext.Provider
@@ -121,6 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         changePassword,
         logout,
         refreshStatus: fetchStatus,
+        saasMode,
+        user,
+        saasLogin,
+        saasRegister,
       }}
     >
       {children}

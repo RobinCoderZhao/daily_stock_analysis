@@ -61,3 +61,16 @@ jinja2>=3.1.0               # Jinja2 template engine for report rendering
 fastapi>=0.109.0            # 现代 Python Web 框架
 uvicorn[standard]>=0.27.0   # ASGI 服务器
 python-multipart>=0.0.6     # FastAPI File/Form upload support
+
+# SaaS multi-tenant support (Phase 1)
+PyJWT>=2.8.0                # JWT token generation/verification
+pydantic[email]>=2.0.0      # Email validation for user registration
+
+# Memory system (Phase 3, optional — only needed when MEMORY_ENABLED=true)
+# mem0ai>=0.1.0             # Uncomment to enable Mem0 memory system
+
+# Payment (Phase 4, optional — only needed when using Stripe payments)
+# stripe>=7.0.0             # Uncomment to enable Stripe payments
+
+# Admin console (Phase 5, optional — for API key encryption)
+# cryptography>=41.0.0      # Uncomment for AES-256-GCM key encryption

@@ -221,3 +221,172 @@ async def auth_logout(request: Request):
     resp = Response(status_code=204)
     resp.delete_cookie(key=COOKIE_NAME, path="/")
     return resp
+
+
+# ============================================================
+# SaaS mode endpoints (only active when SAAS_MODE=true)
+# ============================================================
+
+
+def _is_saas_mode() -> bool:
+    return os.environ.get("SAAS_MODE", "").lower() in ("true", "1", "yes")
+
+
+def _set_refresh_cookie(response: JSONResponse, refresh_token: str, request: Request = None):
+    """Set refresh token as HttpOnly cookie."""
+    response.set_cookie(
+        key="dsa_refresh_token",
+        value=refresh_token,
+        httponly=True,
+        samesite="lax",
+        secure=False,  # Set True in production with HTTPS
+        path="/api/v1/auth",
+        max_age=7 * 24 * 3600,  # 7 days
+    )
+
+
+@router.post(
+    "/register",
+    summary="Register new user (SaaS mode)",
+    description="Create a new user account with email and password.",
+)
+async def auth_register(request: Request):
+    """Register a new user. Only available in SaaS mode."""
+    if not _is_saas_mode():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "saas_only", "message": "Registration requires SaaS mode"},
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "invalid_body"})
+
+    email = (body.get("email") or "").strip()
+    password = (body.get("password") or "").strip()
+    nickname = (body.get("nickname") or "").strip() or None
+
+    try:
+        from src.services.user_service import UserService, UserServiceError
+        service = UserService()
+        result = service.register(email=email, password=password, nickname=nickname)
+
+        resp = JSONResponse(content={
+            "user_id": result["user_id"],
+            "email": result["email"],
+            "nickname": result["nickname"],
+            "role": result["role"],
+            "tier": result["tier"],
+            "access_token": result["access_token"],
+        })
+        _set_refresh_cookie(resp, result["refresh_token"])
+        return resp
+
+    except UserServiceError as e:
+        status = 409 if e.code == "email_exists" else 400
+        return JSONResponse(status_code=status, content={"error": e.code, "message": str(e)})
+    except Exception as e:
+        logger.exception("Registration error")
+        return JSONResponse(status_code=500, content={"error": "internal_error", "message": str(e)})
+
+
+@router.post(
+    "/saas-login",
+    summary="Login with JWT (SaaS mode)",
+    description="Authenticate with email/password and receive JWT tokens.",
+)
+async def auth_saas_login(request: Request):
+    """JWT-based login for SaaS mode."""
+    if not _is_saas_mode():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "saas_only", "message": "JWT login requires SaaS mode"},
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "invalid_body"})
+
+    email = (body.get("email") or "").strip()
+    password = (body.get("password") or "").strip()
+
+    try:
+        from src.services.user_service import UserService, UserServiceError
+        service = UserService()
+        result = service.login(email=email, password=password)
+
+        resp = JSONResponse(content={
+            "user_id": result["user_id"],
+            "email": result["email"],
+            "nickname": result["nickname"],
+            "role": result["role"],
+            "tier": result["tier"],
+            "access_token": result["access_token"],
+        })
+        _set_refresh_cookie(resp, result["refresh_token"])
+        return resp
+
+    except UserServiceError as e:
+        status = 401 if e.code == "auth_failed" else 400
+        return JSONResponse(status_code=status, content={"error": e.code, "message": str(e)})
+    except Exception as e:
+        logger.exception("Login error")
+        return JSONResponse(status_code=500, content={"error": "internal_error", "message": str(e)})
+
+
+@router.post(
+    "/refresh",
+    summary="Refresh access token",
+    description="Generate new access token from refresh token cookie.",
+)
+async def auth_refresh(request: Request):
+    """Refresh access token using HttpOnly cookie."""
+    if not _is_saas_mode():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "saas_only", "message": "Token refresh requires SaaS mode"},
+        )
+
+    refresh = request.cookies.get("dsa_refresh_token")
+    if not refresh:
+        return JSONResponse(status_code=401, content={"error": "missing_refresh_token"})
+
+    try:
+        from src.services.user_service import UserService, UserServiceError
+        service = UserService()
+        result = service.refresh_token(refresh)
+
+        resp = JSONResponse(content={"access_token": result["access_token"]})
+        _set_refresh_cookie(resp, result["refresh_token"])
+        return resp
+
+    except UserServiceError as e:
+        return JSONResponse(status_code=401, content={"error": e.code, "message": str(e)})
+
+
+@router.get(
+    "/me",
+    summary="Get user profile (SaaS mode)",
+    description="Return current user profile with subscription info.",
+)
+async def auth_me(request: Request):
+    """Get current user's profile. Requires JWT authentication."""
+    if not _is_saas_mode():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "saas_only", "message": "Profile requires SaaS mode"},
+        )
+
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+
+    try:
+        from src.services.user_service import UserService, UserServiceError
+        service = UserService()
+        return service.get_profile(user_id)
+    except UserServiceError as e:
+        return JSONResponse(status_code=404, content={"error": e.code, "message": str(e)})
+

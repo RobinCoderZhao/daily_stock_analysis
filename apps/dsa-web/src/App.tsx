@@ -8,6 +8,12 @@ import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ChatPage from './pages/ChatPage';
 import SignalsPage from './pages/SignalsPage';
+import WatchlistPage from './pages/WatchlistPage';
+import ProfilePage from './pages/ProfilePage';
+import PricingPage from './pages/PricingPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import AdminKeysPage from './pages/admin/AdminKeysPage';
 import { ApiErrorAlert } from './components/common';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useAgentChatStore } from './stores/agentChatStore';
@@ -50,6 +56,27 @@ const SignalsIcon: React.FC<{ active?: boolean }> = ({active}) => (
     </svg>
 );
 
+const WatchlistIcon: React.FC<{ active?: boolean }> = ({active}) => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2 : 1.5}
+              d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+    </svg>
+);
+
+const ProfileIcon: React.FC<{ active?: boolean }> = ({active}) => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2 : 1.5}
+              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+    </svg>
+);
+
+const AdminIcon: React.FC<{ active?: boolean }> = ({active}) => (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 2 : 1.5}
+              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+    </svg>
+);
+
 const LogoutIcon: React.FC = () => (
     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -72,6 +99,12 @@ const NAV_ITEMS: DockItem[] = [
         icon: HomeIcon,
     },
     {
+        key: 'watchlist',
+        label: '自选',
+        to: '/watchlist',
+        icon: WatchlistIcon,
+    },
+    {
         key: 'chat',
         label: '问股',
         to: '/chat',
@@ -90,6 +123,12 @@ const NAV_ITEMS: DockItem[] = [
         icon: BacktestIcon,
     },
     {
+        key: 'profile',
+        label: '我的',
+        to: '/profile',
+        icon: ProfileIcon,
+    },
+    {
         key: 'settings',
         label: '设置',
         to: '/settings',
@@ -99,7 +138,8 @@ const NAV_ITEMS: DockItem[] = [
 
 // Dock 导航栏
 const DockNav: React.FC = () => {
-    const {authEnabled, logout} = useAuth();
+    const {authEnabled, logout, user, saasMode} = useAuth();
+    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
     const completionBadge = useAgentChatStore((s) => s.completionBadge);
     return (
         <aside className="dock-nav" aria-label="主导航">
@@ -149,6 +189,17 @@ const DockNav: React.FC = () => {
                         );
                     })}
                 </nav>
+
+                {saasMode && isAdmin && (
+                    <NavLink
+                        to="/admin/dashboard"
+                        title="管理后台"
+                        aria-label="管理后台"
+                        className={({isActive}) => `dock-item${isActive ? ' is-active' : ''}`}
+                    >
+                        {({isActive}) => <AdminIcon active={isActive}/>}
+                    </NavLink>
+                )}
 
                 {authEnabled ? (
                     <button
@@ -219,10 +270,16 @@ const AppContent: React.FC = () => {
             <main className="flex-1 dock-safe-area">
                 <Routes>
                     <Route path="/" element={<HomePage/>}/>
+                    <Route path="/watchlist" element={<WatchlistPage/>}/>
                     <Route path="/chat" element={<ChatPage/>}/>
                     <Route path="/signals" element={<SignalsPage/>}/>
                     <Route path="/backtest" element={<BacktestPage/>}/>
+                    <Route path="/profile" element={<ProfilePage/>}/>
+                    <Route path="/pricing" element={<PricingPage/>}/>
                     <Route path="/settings" element={<SettingsPage/>}/>
+                    <Route path="/admin/dashboard" element={<AdminDashboardPage/>}/>
+                    <Route path="/admin/users" element={<AdminUsersPage/>}/>
+                    <Route path="/admin/keys" element={<AdminKeysPage/>}/>
                     <Route path="/login" element={<LoginPage/>}/>
                     <Route path="*" element={<NotFoundPage/>}/>
                 </Routes>

@@ -58,7 +58,12 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     # 默认静态文件目录
     if static_dir is None:
         static_dir = Path(__file__).parent.parent / "static"
-    
+
+    # Protect Swagger docs when auth is enabled
+    _auth_on = os.environ.get("ADMIN_AUTH_ENABLED", "").lower() in ("true", "1", "yes")
+    _docs_url = None if _auth_on else "/docs"
+    _redoc_url = None if _auth_on else "/redoc"
+
     # 创建 FastAPI 实例
     app = FastAPI(
         title="Daily Stock Analysis API",
@@ -72,6 +77,8 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             "当前版本暂无认证要求"
         ),
         version="1.0.0",
+        docs_url=_docs_url,
+        redoc_url=_redoc_url,
         lifespan=app_lifespan,
     )
     
@@ -91,19 +98,44 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     if extra_origins:
         allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
     
-    # 允许所有来源（开发/演示用）
+    # Allow all origins (dev/demo - insecure, credentials disabled with wildcard)
+    allow_credentials = True
     if os.environ.get("CORS_ALLOW_ALL", "").lower() == "true":
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "CORS_ALLOW_ALL=true: all origins accepted. "
+            "Use CORS_ORIGINS for production."
+        )
         allowed_origins = ["*"]
-    
+        allow_credentials = False  # wildcard + credentials is insecure
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
-        allow_credentials=True,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
     add_auth_middleware(app)
+
+    # SaaS quota enforcement (after auth, so user_id is available)
+    from api.middlewares.quota import add_quota_middleware
+    add_quota_middleware(app)
+
+    # Admin role enforcement (after auth + quota)
+    from api.middlewares.admin import add_admin_middleware
+    add_admin_middleware(app)
+
+    # Security warning: auth disabled + listening on 0.0.0.0
+    _host = os.environ.get("WEBUI_HOST", "127.0.0.1")
+    if not _auth_on and _host == "0.0.0.0":
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "SECURITY WARNING: Auth is DISABLED but listening on 0.0.0.0. "
+            "All APIs including config with API keys are publicly accessible. "
+            "Set ADMIN_AUTH_ENABLED=true for production."
+        )
     
     # ============================================================
     # 注册路由

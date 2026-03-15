@@ -47,7 +47,7 @@ class SystemConfigService:
         return build_schema_response()
 
     def get_config(self, include_schema: bool = True, mask_token: str = "******") -> Dict[str, Any]:
-        """Return current config values without server-side secret masking."""
+        """Return current config values with server-side secret masking."""
         config_map = self._manager.read_config_map()
         registered_keys = set(get_registered_field_keys())
         all_keys = set(config_map.keys()) | registered_keys
@@ -66,11 +66,20 @@ class SystemConfigService:
         for key in all_keys:
             raw_value = config_map.get(key, "")
             field_schema = schema_by_key[key]
+            # Server-side masking for sensitive fields (API keys, tokens, etc.)
+            is_sensitive = bool(field_schema.get("is_sensitive", False))
+            if is_sensitive and raw_value:
+                display_value = mask_token
+                is_masked = True
+            else:
+                display_value = raw_value
+                is_masked = False
+
             item: Dict[str, Any] = {
                 "key": key,
-                "value": raw_value,
+                "value": display_value,
                 "raw_value_exists": bool(raw_value),
-                "is_masked": False,
+                "is_masked": is_masked,
             }
             if include_schema:
                 item["schema"] = field_schema

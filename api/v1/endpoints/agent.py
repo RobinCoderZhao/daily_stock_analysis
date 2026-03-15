@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -98,26 +98,35 @@ async def get_strategies():
     return StrategiesResponse(strategies=strategies)
 
 @router.post("/chat", response_model=ChatResponse)
-async def agent_chat(request: ChatRequest):
+async def agent_chat(request: Request, body: ChatRequest):
     """
     Chat with the AI Agent.
+    In SaaS mode, injects user memories into context and saves conversation.
     """
     config = get_config()
     
     if not config.agent_mode:
         raise HTTPException(status_code=400, detail="Agent mode is not enabled")
         
-    session_id = request.session_id or str(uuid.uuid4())
+    session_id = body.session_id or str(uuid.uuid4())
     
     try:
-        executor = _build_executor(config, request.skills)
+        # Inject memory context if SaaS mode + memory enabled
+        enriched_context = _inject_memory_context(request, body.message, body.context)
+
+        executor = _build_executor(config, body.skills)
 
         # Offload the blocking call to a thread to avoid blocking the event loop.
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: executor.chat(message=request.message, session_id=session_id,
-                                  context=request.context),
+            lambda: executor.chat(message=body.message, session_id=session_id,
+                                  context=enriched_context),
+        )
+
+        # Save conversation to memory (async, non-blocking)
+        _schedule_memory_save(
+            request, body.message, result.content, session_id
         )
 
         return ChatResponse(
@@ -208,7 +217,7 @@ def _build_executor(config, skills: Optional[List[str]] = None):
 
 
 @router.post("/chat/stream")
-async def agent_chat_stream(request: ChatRequest):
+async def agent_chat_stream(request: Request, body: ChatRequest):
     """
     Chat with the AI Agent, streaming progress via SSE.
     Each SSE event is a JSON object with a 'type' field:
@@ -223,9 +232,12 @@ async def agent_chat_stream(request: ChatRequest):
     if not config.agent_mode:
         raise HTTPException(status_code=400, detail="Agent mode is not enabled")
 
-    session_id = request.session_id or str(uuid.uuid4())
+    session_id = body.session_id or str(uuid.uuid4())
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
+
+    # Inject memory context
+    enriched_context = _inject_memory_context(request, body.message, body.context)
 
     def progress_callback(event: dict):
         # Enrich tool events with display names
@@ -236,13 +248,19 @@ async def agent_chat_stream(request: ChatRequest):
 
     def run_sync():
         try:
-            executor = _build_executor(config, request.skills)
+            executor = _build_executor(config, body.skills)
             result = executor.chat(
-                message=request.message,
+                message=body.message,
                 session_id=session_id,
                 progress_callback=progress_callback,
-                context=request.context,
+                context=enriched_context,
             )
+
+            # Save conversation to memory
+            _schedule_memory_save(
+                request, body.message, result.content, session_id
+            )
+
             asyncio.run_coroutine_threadsafe(
                 queue.put({
                     "type": "done",
@@ -289,3 +307,69 @@ async def agent_chat_stream(request: ChatRequest):
             "Connection": "keep-alive",
         },
     )
+
+
+def _inject_memory_context(
+    request: Request,
+    message: str,
+    existing_context: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """In SaaS mode, search user memories and inject into context."""
+    import os
+    if os.environ.get("SAAS_MODE", "").lower() not in ("true", "1", "yes"):
+        return existing_context
+
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        return existing_context
+
+    try:
+        from src.services.memory_service import MemoryService, format_memories_for_prompt
+        service = MemoryService()
+        if not service.available:
+            return existing_context
+
+        memories = service.search(user_id, message, limit=5)
+        memory_text = format_memories_for_prompt(memories)
+        if not memory_text:
+            return existing_context
+
+        ctx = dict(existing_context) if existing_context else {}
+        ctx["user_memory_context"] = memory_text
+        return ctx
+    except Exception as e:
+        logger.warning(f"Memory injection failed: {e}")
+        return existing_context
+
+
+def _schedule_memory_save(
+    request: Request,
+    user_message: str,
+    assistant_response: str,
+    session_id: str,
+):
+    """Save conversation to memory (fire-and-forget)."""
+    import os
+    if os.environ.get("SAAS_MODE", "").lower() not in ("true", "1", "yes"):
+        return
+
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        return
+
+    try:
+        from src.services.memory_service import MemoryService
+        service = MemoryService()
+        if not service.available:
+            return
+
+        service.add_conversation(
+            user_id=user_id,
+            messages=[
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": assistant_response},
+            ],
+            session_id=session_id,
+        )
+    except Exception as e:
+        logger.warning(f"Memory save failed: {e}")

@@ -255,6 +255,13 @@ class Config:
 
     # === 数据库配置 ===
     database_path: str = "./data/stock_analysis.db"
+    database_url: str = ""  # PostgreSQL: postgresql://user:pass@host:port/dbname
+
+    # === SaaS 多租户配置 ===
+    saas_mode: bool = False
+    jwt_secret_key: str = ""
+    memory_enabled: bool = False
+    memory_llm_model: str = "gpt-4o-mini"
 
     # 是否保存分析上下文快照（用于历史回溯）
     save_context_snapshot: bool = True
@@ -707,6 +714,9 @@ class Config:
             md2img_engine=cls._parse_md2img_engine(os.getenv('MD2IMG_ENGINE', 'wkhtmltoimage')),
             prefetch_realtime_quotes=os.getenv('PREFETCH_REALTIME_QUOTES', 'true').lower() == 'true',
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
+            database_url=os.getenv('DATABASE_URL', ''),
+            saas_mode=os.getenv('SAAS_MODE', 'false').lower() in ('true', '1', 'yes'),
+            jwt_secret_key=os.getenv('JWT_SECRET_KEY', ''),
             save_context_snapshot=os.getenv('SAVE_CONTEXT_SNAPSHOT', 'true').lower() == 'true',
             backtest_enabled=os.getenv('BACKTEST_ENABLED', 'true').lower() == 'true',
             backtest_eval_window_days=int(os.getenv('BACKTEST_EVAL_WINDOW_DAYS', '10')),
