@@ -2,9 +2,12 @@ import type React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { watchlistApi, type EnrichedWatchlistItem } from '../api/watchlist';
+import { historyApi } from '../api/history';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert } from '../components/common';
+import { ReportSummary } from '../components/report';
 import { validateStockCode } from '../utils/validation';
+import type { AnalysisReport } from '../types/analysis';
 
 /* ─── Score color helpers ─── */
 function scoreColor(score: number | null): string {
@@ -34,28 +37,13 @@ function barColor(score: number | null): string {
 function formatDate(iso: string | null): string {
   if (!iso) return '--';
   const d = new Date(iso);
+  const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   const h = String(d.getHours()).padStart(2, '0');
   const min = String(d.getMinutes()).padStart(2, '0');
-  return `${m}/${day} ${h}:${min}`;
+  return `${y}/${m}/${day} ${h}:${min}`;
 }
-
-/* ─── Score Bar Component ─── */
-const ScoreBar: React.FC<{ label: string; score: number | null; max: number }> = ({ label, score, max }) => (
-  <div className="flex items-center gap-2 text-xs">
-    <span className="w-14 text-secondary shrink-0">{label}</span>
-    <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${barColor(score)}`}
-        style={{ width: score !== null ? `${(score / max) * 100}%` : '0%' }}
-      />
-    </div>
-    <span className={`w-10 text-right tabular-nums ${scoreColor(score)}`}>
-      {score !== null ? `${Math.round(score)}` : '--'}/{max}
-    </span>
-  </div>
-);
 
 /* ─── Stock Card ─── */
 const StockCard: React.FC<{
@@ -66,6 +54,7 @@ const StockCard: React.FC<{
   onAnalyze: () => void;
 }> = ({ item, isActive, onClick, onRemove, onAnalyze }) => {
   const score = item.composite_score ?? item.sentiment_score;
+  const displayName = item.name && item.name !== item.code ? item.name : null;
   return (
     <div
       className={`group relative rounded-2xl border p-4 backdrop-blur-sm cursor-pointer transition-all duration-200
@@ -81,8 +70,8 @@ const StockCard: React.FC<{
       <div className="flex items-start justify-between pl-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-white truncate">
-              {item.name || item.code}
+            <h3 className="text-base font-bold text-white truncate">
+              {displayName || item.code}
             </h3>
             {score !== null && (
               <span className={`shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-sm font-bold ${scoreBg(score)} ${scoreColor(score)}`}>
@@ -137,16 +126,36 @@ const StockCard: React.FC<{
   );
 };
 
-/* ─── Analysis Drawer ─── */
+/* ─── Analysis Drawer using ReportSummary ─── */
 const AnalysisDrawer: React.FC<{
-  item: EnrichedWatchlistItem | null;
+  analysisId: number | null;
+  stockName: string;
+  stockCode: string;
   onClose: () => void;
-  onAnalyze: (code: string) => void;
-  onViewFull: (code: string) => void;
-}> = ({ item, onClose, onAnalyze, onViewFull }) => {
-  if (!item) return null;
+}> = ({ analysisId, stockName, stockCode, onClose }) => {
+  const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const score = item.composite_score ?? item.sentiment_score;
+  // Load full report when analysisId changes
+  useEffect(() => {
+    if (!analysisId) return;
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError(null);
+    historyApi
+      .getDetail(analysisId)
+      .then((data) => {
+        if (!cancelled) setReport(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(getParsedApiError(err)?.message || 'Failed to load report');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [analysisId]);
 
   // Close on ESC
   useEffect(() => {
@@ -157,35 +166,20 @@ const AnalysisDrawer: React.FC<{
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — visible on ALL screen sizes, click to close */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Drawer panel */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-xl bg-base/95 backdrop-blur-xl border-l border-white/10 shadow-2xl overflow-y-auto animate-slide-in-right">
+      {/* Drawer panel — wider to fit full report */}
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-3xl bg-base/95 backdrop-blur-xl border-l border-white/10 shadow-2xl overflow-y-auto animate-slide-in-right">
         {/* Header */}
         <div className="sticky top-0 z-10 bg-base/90 backdrop-blur-sm border-b border-white/8 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {score !== null && (
-                <span className={`inline-flex items-center justify-center w-12 h-12 rounded-xl text-lg font-bold ${scoreBg(score)} ${scoreColor(score)}`}>
-                  {Math.round(score)}
-                </span>
-              )}
-              <div>
-                <h2 className="text-lg font-semibold text-white">{item.name || item.code}</h2>
-                <div className="flex items-center gap-2 text-xs text-muted">
-                  <span className="font-mono">{item.code}</span>
-                  {item.analysis_date && (
-                    <>
-                      <span className="text-white/20">·</span>
-                      <span>{formatDate(item.analysis_date)}</span>
-                    </>
-                  )}
-                </div>
-              </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">{stockName || stockCode}</h2>
+              <p className="text-xs text-muted font-mono">{stockCode}</p>
             </div>
             <button
               type="button"
@@ -199,85 +193,31 @@ const AnalysisDrawer: React.FC<{
           </div>
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-5 space-y-6">
-          {/* Composite label / advice */}
-          {(item.composite_label || item.operation_advice) && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {item.composite_label && (
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${scoreBg(score)} ${scoreColor(score)}`}>
-                  {item.composite_label}
-                </span>
-              )}
-              {item.operation_advice && (
-                <span className="px-3 py-1 rounded-full text-sm bg-white/5 text-secondary">
-                  {item.operation_advice}
-                </span>
-              )}
-              {item.trend_prediction && (
-                <span className="px-3 py-1 rounded-full text-sm bg-white/5 text-secondary">
-                  {item.trend_prediction}
-                </span>
-              )}
+        {/* Content — reuse HomePage's ReportSummary */}
+        <div className="px-4 py-4">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="w-10 h-10 border-3 border-cyan/20 border-t-cyan rounded-full animate-spin" />
+              <p className="mt-3 text-secondary text-sm">加载报告中...</p>
             </div>
-          )}
-
-          {/* Score breakdown */}
-          {score !== null && (
-            <div className="rounded-xl border border-white/8 bg-card/40 p-4 space-y-3">
-              <h3 className="text-sm font-medium text-white mb-3">评分详情</h3>
-              <ScoreBar label="技术面" score={item.technical_score} max={40} />
-              <ScoreBar label="基本面" score={item.fundamental_score} max={30} />
-              <ScoreBar label="资金流" score={item.money_flow_score} max={20} />
-              <ScoreBar label="大盘" score={item.market_score} max={10} />
-              {item.confidence_score !== null && (
-                <div className="pt-2 mt-2 border-t border-white/5">
-                  <ScoreBar label="置信度" score={item.confidence_score} max={100} />
-                </div>
-              )}
+          ) : loadError ? (
+            <div className="rounded-xl border border-danger/20 bg-danger/5 p-4 text-sm text-danger">
+              {loadError}
             </div>
-          )}
-
-          {/* Analysis summary */}
-          {item.analysis_summary ? (
-            <div className="rounded-xl border border-white/8 bg-card/40 p-4">
-              <h3 className="text-sm font-medium text-white mb-3">分析摘要</h3>
-              <p className="text-sm text-secondary leading-relaxed whitespace-pre-line">
-                {item.analysis_summary}
-              </p>
+          ) : report ? (
+            <ReportSummary data={report} isHistory />
+          ) : !analysisId ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-12 h-12 mb-3 rounded-xl bg-elevated flex items-center justify-center">
+                <svg className="w-6 h-6 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-medium text-white mb-1">暂无分析数据</h3>
+              <p className="text-xs text-muted">点击「重新分析」开始首次分析</p>
             </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-white/10 bg-card/20 p-8 text-center">
-              <p className="text-sm text-muted">暂无分析数据</p>
-              <p className="text-xs text-muted mt-1">点击下方按钮开始分析</p>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => onAnalyze(item.code)}
-              className="flex-1 btn-primary flex items-center justify-center gap-2 py-2.5"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              重新分析
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewFull(item.code)}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-secondary hover:bg-white/10 hover:text-white transition flex items-center justify-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-              详细报告
-            </button>
-          </div>
+          ) : null}
         </div>
       </div>
     </>
@@ -352,7 +292,6 @@ const WatchlistPage: React.FC = () => {
 
   const confirmAnalyze = () => {
     if (!analyzeConfirm) return;
-    // Navigate to chat page with pre-filled stock code
     navigate(`/chat?stock=${analyzeConfirm}`);
     setAnalyzeConfirm(null);
   };
@@ -439,13 +378,13 @@ const WatchlistPage: React.FC = () => {
         </div>
       )}
 
-      {/* Analysis detail drawer */}
+      {/* Analysis detail drawer — reuses HomePage's ReportSummary */}
       {selectedItem && (
         <AnalysisDrawer
-          item={selectedItem}
+          analysisId={selectedItem.analysis_id}
+          stockName={selectedItem.name || selectedItem.code}
+          stockCode={selectedItem.code}
           onClose={() => setSelectedCode(null)}
-          onAnalyze={handleAnalyze}
-          onViewFull={(code) => navigate(`/?stock=${code}`)}
         />
       )}
 

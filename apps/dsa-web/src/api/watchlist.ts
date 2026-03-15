@@ -11,6 +11,7 @@ export type WatchlistItem = {
 };
 
 export type EnrichedWatchlistItem = WatchlistItem & {
+  analysis_id: number | null;
   sentiment_score: number | null;
   composite_score: number | null;
   composite_label: string | null;

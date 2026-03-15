@@ -191,6 +191,7 @@ async def get_enriched_watchlist(request: Request):
             "sort_order": item.get("sort_order", 0),
             "added_at": item.get("added_at"),
             # Analysis data (from most recent analysis)
+            "analysis_id": latest.id if latest else None,
             "sentiment_score": latest.sentiment_score if latest else None,
             "composite_score": latest.composite_score if latest else None,
             "composite_label": latest.composite_label if latest else None,
