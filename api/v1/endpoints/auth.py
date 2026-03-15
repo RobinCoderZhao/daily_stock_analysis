@@ -88,11 +88,13 @@ async def auth_status(request: Request):
     if auth_enabled:
         cookie_val = request.cookies.get(COOKIE_NAME)
         logged_in = verify_session(cookie_val) if cookie_val else False
+    saas_mode = os.environ.get("SAAS_MODE", "").lower() in ("true", "1", "yes")
     return {
         "authEnabled": auth_enabled,
         "loggedIn": logged_in,
         "passwordSet": is_password_set() if auth_enabled else False,
         "passwordChangeable": is_password_changeable() if auth_enabled else False,
+        "saasMode": saas_mode,
     }
 
 
