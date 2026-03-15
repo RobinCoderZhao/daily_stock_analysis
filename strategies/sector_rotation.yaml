@@ -1,0 +1,38 @@
+name: sector_rotation
+display_name: 板块轮动择时
+description: 基于行业板块强弱轮动的择时策略，分域建模思路
+category: market
+confidence_weight: 0.75
+applicable_market:
+  - trend
+  - oscillation
+instructions: |
+  ## 板块轮动择时策略（2026年分域建模思路）
+
+  不同板块在不同市场环境下表现差异很大。
+  先判断当前强势板块，仅在强势板块内选股。
+
+  ### 操作逻辑：
+  1. 使用 get_analysis_context 获取当前市场整体状况
+  2. 关注近期涨幅领先的板块中的个股
+  3. 对强势板块内个股应用趋势策略
+  4. 弱势板块个股给出"回避"建议
+
+  ### 判断标准：
+  - 个股所在板块近5日涨幅排名前30%：优先关注
+  - 个股所在板块近5日涨幅排名后30%：建议回避
+  - 板块轮动有惯性（强者恒强3-5天）
+  - 但连涨5天以上需警惕回调
+
+  ### 注意事项：
+  - 需要结合大盘环境判断（牛市追强，熊市防守）
+  - 本策略侧重宏观择时，与个股技术面策略配合使用
+required_tools:
+  - get_analysis_context
+  - analyze_trend
+core_rules: [1]
+# Quantitative backtesting rules (Phase 1)
+# Requires sector-level data from Tushare Pro.
+# Deferred pending Tushare integration.
+quantitative_rules:
+  backtestable: false

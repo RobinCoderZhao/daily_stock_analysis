@@ -1,0 +1,57 @@
+name: atr_squeeze_breakout
+display_name: ATR收缩后突破
+description: ATR持续收缩后突然扩大，波动率爆发突破信号
+category: trend
+confidence_weight: 0.80
+applicable_market:
+  - trend
+  - oscillation
+not_applicable_market:
+  - crash
+instructions: |
+  ## ATR收缩后突破策略
+
+  当ATR(14)持续收缩表示波动率压缩（市场蓄势），
+  ATR突然扩大且价格向上突破时，是趋势爆发的信号。
+
+  ### 买入条件（全部满足）：
+  1. atr_trend = contracting 或 收缩（连续5天以上ATR收缩）
+  2. 当日ATR突然扩大 > 前一日ATR × 1.5
+  3. 当日为阳线（收盘 > 开盘）
+  4. 成交量放大（量比 > 1.5）
+
+  ### 卖出/回避条件：
+  - ATR再次收缩且价格未能创新高
+  - 连续2日阴线
+
+  ### 风险控制：
+  - 止损：突破当日最低价
+  - 仓位：根据ATR设定（风险金额 / ATR = 仓位数量）
+required_tools:
+  - analyze_trend
+core_rules: [1, 2]
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: atr_trend
+      operator: "in"
+      value: ["收缩"]
+    - indicator: atr_ratio
+      operator: "<"
+      value: 3.0
+    - indicator: volume_ratio_5d
+      operator: ">"
+      value: 1.5
+    - indicator: trend_status
+      operator: "not_in"
+      value: ["空头排列", "强势空头"]
+  sell_conditions:
+    - indicator: atr_trend
+      operator: "=="
+      value: "收缩"
+    - indicator: trend_status
+      operator: "in"
+      value: ["空头排列", "强势空头"]
+  holding_days: 8
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 2.0

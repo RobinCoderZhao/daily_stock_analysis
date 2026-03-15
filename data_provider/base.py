@@ -343,8 +343,9 @@ class BaseFetcher(ABC):
         处理：
         1. 确保日期列格式正确
         2. 数值类型转换
-        3. 去除空值行
-        4. 按日期排序
+        3. pct_chg 口径统一（小数 → 百分比）
+        4. 去除空值行
+        5. 按日期排序
         """
         df = df.copy()
         
@@ -357,6 +358,18 @@ class BaseFetcher(ABC):
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # Normalize pct_chg to percentage format (5.23 means +5.23%)
+        # Some sources (baostock) return decimal format (0.0523)
+        if 'pct_chg' in df.columns:
+            pct_series = df['pct_chg'].dropna()
+            if len(pct_series) > 10:
+                # Heuristic: if 95th percentile of absolute values < 1,
+                # the data is likely in decimal format and needs * 100
+                p95 = pct_series.abs().quantile(0.95)
+                if p95 < 1.0:
+                    df['pct_chg'] = df['pct_chg'] * 100
+                    logger.debug("pct_chg normalized: decimal -> percentage format")
         
         # 去除关键列为空的行
         df = df.dropna(subset=['close', 'volume'])
@@ -580,6 +593,9 @@ class DataFetcherManager:
                 )
                 
                 if df is not None and not df.empty:
+                    # Backfill turnover_rate if the winning fetcher didn't provide it
+                    if 'turnover_rate' not in df.columns or df['turnover_rate'].isna().all():
+                        df = self._backfill_turnover_rate(df, stock_code)
                     elapsed = time.time() - request_start
                     logger.info(
                         f"[数据源完成] {stock_code} 使用 [{fetcher.name}] 获取成功: "
@@ -884,6 +900,41 @@ class DataFetcherManager:
                     setattr(primary, f, val)
                     filled.append(f)
         return filled
+
+    def _backfill_turnover_rate(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
+        """Estimate turnover_rate from volume and circulating market cap.
+
+        Called when the winning fetcher's daily data does not contain a
+        turnover_rate column (e.g. pytdx, baostock).  Uses realtime quote's
+        ``circ_mv`` and ``price`` to derive circulating shares, then:
+            turnover_rate = volume / circ_shares * 100
+
+        Args:
+            df: Daily OHLCV DataFrame (must contain 'volume').
+            stock_code: Stock code used to fetch the realtime quote.
+
+        Returns:
+            DataFrame with turnover_rate column backfilled (best-effort).
+        """
+        try:
+            quote = self.get_realtime_quote(stock_code)
+            if (
+                quote
+                and getattr(quote, "circ_mv", None)
+                and getattr(quote, "price", None)
+                and quote.price > 0
+            ):
+                circ_shares = quote.circ_mv / quote.price
+                if circ_shares > 0 and 'volume' in df.columns:
+                    df['turnover_rate'] = df['volume'] / circ_shares * 100
+                    df['turnover_rate'] = df['turnover_rate'].round(4)
+                    logger.info(
+                        f"[回填] {stock_code} turnover_rate estimated from circ_mv "
+                        f"(circ_shares={circ_shares:.0f})"
+                    )
+        except Exception as e:
+            logger.warning(f"[回填] {stock_code} turnover_rate backfill failed: {e}")
+        return df
 
     def get_chip_distribution(self, stock_code: str):
         """

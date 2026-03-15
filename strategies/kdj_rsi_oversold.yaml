@@ -1,0 +1,59 @@
+name: kdj_rsi_oversold
+display_name: KDJ+RSI超卖共振
+description: KDJ和RSI同时超卖后反弹，双指标共振买入信号
+category: reversal
+confidence_weight: 0.90
+applicable_market:
+  - trend
+  - oscillation
+not_applicable_market:
+  - crash
+instructions: |
+  ## KDJ + RSI 超卖共振策略
+
+  当KDJ和RSI两个独立的超卖指标同时发出超卖信号后反弹，
+  形成共振买入信号。假信号率远低于单一指标。
+
+  ### 买入条件（全部满足）：
+  1. RSI(14) < 30（进入超卖区域）或 rsi_status = oversold
+  2. KDJ J值 < 0 或 K值 < 20（kdj_signal = oversold）
+  3. KDJ出现金叉（kdj_signal = golden_cross 且 K < 30）
+  4. 当前收盘价在MA20上方（趋势过滤器，避免下跌趋势中抄底）
+
+  ### 卖出/回避条件：
+  - RSI > 70（超买区域）
+  - KDJ死叉（kdj_signal = dead_cross）且J > 100
+  - 跌破MA20
+
+  ### 风险控制：
+  - 必须在上升趋势中使用（MA20方向=up）
+  - 止损：低于超卖时最低价的3%
+  - 仓位：不超过总仓位30%
+required_tools:
+  - analyze_trend
+core_rules: [2, 4]
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: rsi_12
+      operator: "<"
+      value: 30
+    - indicator: kdj_signal
+      operator: "=="
+      value: "golden_cross"
+    - indicator: kdj_k
+      operator: "<"
+      value: 30
+    - indicator: ma20_direction
+      operator: "=="
+      value: "上行"
+  sell_conditions:
+    - indicator: rsi_12
+      operator: ">"
+      value: 70
+    - indicator: kdj_signal
+      operator: "=="
+      value: "dead_cross"
+  holding_days: 10
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0

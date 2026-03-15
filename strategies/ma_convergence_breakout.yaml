@@ -1,0 +1,58 @@
+name: ma_convergence_breakout
+display_name: 均线粘合后发散
+description: MA5/MA10/MA20三线粘合后向上发散，趋势启动信号
+category: trend
+confidence_weight: 0.85
+applicable_market:
+  - trend
+  - oscillation
+not_applicable_market:
+  - crash
+instructions: |
+  ## 均线粘合后发散策略
+
+  当MA5、MA10、MA20三条均线间距收窄到收盘价的1%以内（粘合），
+  随后MA5向上突破MA10和MA20（发散），是趋势启动的经典信号。
+
+  ### 买入条件（全部满足）：
+  1. MA5、MA10、MA20最大价差 < 收盘价 × 1%
+  2. MA5 > MA10 > MA20（多头排列形成）
+  3. 量比 > 1.2（成交量配合放大）
+  4. MA20斜率方向 = up（趋势转向）
+
+  ### 卖出/回避条件：
+  - MA5 跌破 MA20
+  - 量比持续萎缩 < 0.8
+  - 均线重新粘合但向下发散
+
+  ### 风险控制：
+  - 止损：跌破粘合区间最低价
+  - 止盈：第一目标 = 粘合区间幅度 × 2
+required_tools:
+  - analyze_trend
+core_rules: [1, 3]
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_strength
+      operator: "<"
+      value: 30
+    - indicator: trend_status
+      operator: "in"
+      value: ["多头排列", "盘整"]
+    - indicator: volume_ratio_5d
+      operator: ">"
+      value: 1.2
+    - indicator: ma20_direction
+      operator: "=="
+      value: "上行"
+  sell_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["弱势空头", "空头排列"]
+    - indicator: volume_ratio_5d
+      operator: "<"
+      value: 0.8
+  holding_days: 10
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 2.5

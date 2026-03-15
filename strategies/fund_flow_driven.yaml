@@ -1,0 +1,43 @@
+name: fund_flow_driven
+display_name: 资金流向驱动
+description: 主力资金持续流入+量价配合的强势延续策略
+category: trend
+confidence_weight: 0.70
+applicable_market:
+  - trend
+not_applicable_market:
+  - crash
+instructions: |
+  ## 资金流向驱动策略
+
+  主力资金持续流入是股价上涨的核心驱动力。
+  当量价配合良好时，强势延续概率高。
+
+  ### 买入条件（全部满足）：
+  1. 近5日主力资金净流入 > 0（如有资金流数据）
+  2. 近5日成交额持续放大（volume_trend 为放量趋势）
+  3. 均线多头排列（MA5 > MA10 > MA20）
+  4. 筹码获利盘在50%-80%（健康区间，如有筹码数据）
+
+  ### 卖出/回避条件：
+  - 主力资金连续3日净流出
+  - 成交量突然萎缩（量比 < 0.5）
+  - 获利盘 > 90%（获利盘过重，抛压大）
+
+  ### 数据降级说明：
+  - 如无资金流数据，使用成交量变化趋势替代
+  - 如无筹码分布数据，跳过条件4
+  - 核心依赖：均线排列 + 量能趋势（始终可用）
+
+  ### 注意事项：
+  - 大单流入不等于主力建仓（可能是对倒）
+  - 需结合筹码分布判断更可靠
+  - 高换手率 + 资金流入 = 强信号
+required_tools:
+  - analyze_trend
+core_rules: [1, 3]
+# Quantitative backtesting rules (Phase 1)
+# Requires money flow data from Tushare Pro (6000 points).
+# Deferred pending Tushare integration.
+quantitative_rules:
+  backtestable: false

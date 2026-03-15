@@ -79,3 +79,8 @@ confidence_weight: 0.60
 applicable_market:
   - reversal
   - oscillation
+# Quantitative backtesting rules (Phase 1)
+# Emotion cycle requires market-wide sentiment indicators beyond stock-level data.
+# Deferred pending sentiment data integration.
+quantitative_rules:
+  backtestable: false

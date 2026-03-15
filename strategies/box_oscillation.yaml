@@ -71,3 +71,28 @@ applicable_market:
 not_applicable_market:
   - trend
   - crash
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["盘整", "弱势多头"]
+    - indicator: rsi_12
+      operator: "<"
+      value: 40
+    - indicator: volume_status
+      operator: "in"
+      value: ["缩量回调", "量能正常"]
+    - indicator: support_ma10
+      operator: "=="
+      value: true
+  sell_conditions:
+    - indicator: rsi_12
+      operator: ">"
+      value: 60
+    - indicator: volume_status
+      operator: "=="
+      value: "缩量上涨"
+  holding_days: 8
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 2.0

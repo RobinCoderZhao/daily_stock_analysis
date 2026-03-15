@@ -46,3 +46,8 @@ applicable_market:
 not_applicable_market:
   - crash
   - oscillation
+# Quantitative backtesting rules (Phase 1)
+# Dragon head requires sector leadership and market breadth data.
+# Deferred pending sector data integration.
+quantitative_rules:
+  backtestable: false

@@ -58,3 +58,8 @@ confidence_weight: 0.55
 applicable_market:
   - trend
   - oscillation
+# Quantitative backtesting rules (Phase 1)
+# Chan theory (缠论) requires complex fractal and center (中枢) detection.
+# Deferred pending dedicated indicator implementation.
+quantitative_rules:
+  backtestable: false

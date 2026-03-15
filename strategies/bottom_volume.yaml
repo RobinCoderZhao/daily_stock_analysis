@@ -50,3 +50,25 @@ applicable_market:
   - reversal
 not_applicable_market:
   - trend
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["空头排列", "强势空头", "弱势空头"]
+    - indicator: rsi_12
+      operator: "<"
+      value: 30
+    - indicator: volume_ratio_5d
+      operator: ">"
+      value: 3.0
+  sell_conditions:
+    - indicator: rsi_12
+      operator: ">"
+      value: 60
+    - indicator: volume_ratio_5d
+      operator: "<"
+      value: 0.5
+  holding_days: 10
+  stop_loss_atr_multiple: 2.5
+  take_profit_atr_multiple: 3.0

@@ -64,3 +64,8 @@ confidence_weight: 0.40
 applicable_market:
   - trend
   - oscillation
+# Quantitative backtesting rules (Phase 1)
+# Wave theory requires complex wave counting beyond simple indicators.
+# Simplified proxy: trend reversal at key RSI levels.
+quantitative_rules:
+  backtestable: false

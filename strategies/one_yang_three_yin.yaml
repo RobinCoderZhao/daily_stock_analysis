@@ -37,3 +37,25 @@ instructions: |
 confidence_weight: 0.90
 applicable_market:
   - trend
+# Quantitative backtesting rules (Phase 1)
+# Note: full K-line pattern detection requires candlestick data beyond TrendAnalysisResult.
+# Simplified: use trend + volume proxy. Full pattern detection deferred.
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["多头排列", "强势多头"]
+    - indicator: volume_status
+      operator: "=="
+      value: "缩量回调"
+    - indicator: bias_ma5
+      operator: "between"
+      value: [-1.0, 3.0]
+  sell_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["空头排列", "强势空头"]
+  holding_days: 5
+  stop_loss_atr_multiple: 1.5
+  take_profit_atr_multiple: 2.0
+  backtestable: true

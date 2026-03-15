@@ -48,3 +48,28 @@ applicable_market:
   - trend
 not_applicable_market:
   - crash
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["强势多头", "多头排列"]
+    - indicator: macd_status
+      operator: "in"
+      value: ["BULLISH", "GOLDEN_CROSS"]
+    - indicator: bias_ma5
+      operator: "<"
+      value: 3.0
+    - indicator: volume_status
+      operator: "in"
+      value: ["放量上涨", "量能正常", "缩量回调"]
+  sell_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["弱势空头", "空头排列", "强势空头"]
+    - indicator: macd_status
+      operator: "=="
+      value: "DEAD_CROSS"
+  holding_days: 15
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0

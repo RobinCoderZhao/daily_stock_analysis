@@ -43,10 +43,12 @@ _SENTINEL = object()
 _SKILL_MANAGER_CUSTOM_DIR: object = _SENTINEL
 
 DEFAULT_AGENT_SKILLS = [
-    "bull_trend",
-    "one_yang_three_yin",
-    "volume_breakout",
-    "shrink_pullback",
+    "bull_trend",              # confidence: 0.95
+    "shrink_pullback",         # confidence: 0.95
+    "kdj_rsi_oversold",        # confidence: 0.90 (new)
+    "one_yang_three_yin",      # confidence: 0.90
+    "volume_breakout",         # confidence: 0.85
+    "ma_convergence_breakout", # confidence: 0.85 (new)
 ]
 
 

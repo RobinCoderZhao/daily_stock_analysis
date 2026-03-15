@@ -47,3 +47,28 @@ applicable_market:
   - trend
 not_applicable_market:
   - crash
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["强势多头", "多头排列"]
+    - indicator: bias_ma5
+      operator: "between"
+      value: [-2.0, 2.0]
+    - indicator: volume_ratio_5d
+      operator: "<"
+      value: 0.7
+    - indicator: support_ma5
+      operator: "=="
+      value: true
+  sell_conditions:
+    - indicator: trend_status
+      operator: "in"
+      value: ["空头排列", "强势空头"]
+    - indicator: bias_ma5
+      operator: ">"
+      value: 5.0
+  holding_days: 10
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 2.5

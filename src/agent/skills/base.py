@@ -62,6 +62,9 @@ class Skill:
     # Applicable market conditions
     applicable_market: List[str] = field(default_factory=list)
     not_applicable_market: List[str] = field(default_factory=list)
+    # Quantitative backtesting rules (Phase 1)
+    # Contains buy_conditions, sell_conditions, holding_days, stop_loss_atr_multiple, etc.
+    quantitative_rules: Optional[Dict] = None
 
 
 def load_skill_from_yaml(filepath: Union[str, Path]) -> Skill:
@@ -113,6 +116,7 @@ def load_skill_from_yaml(filepath: Union[str, Path]) -> Skill:
         confidence_weight=float(data.get("confidence_weight", 1.0)),
         applicable_market=data.get("applicable_market", []) or [],
         not_applicable_market=data.get("not_applicable_market", []) or [],
+        quantitative_rules=data.get("quantitative_rules"),
     )
 
 

@@ -1,0 +1,39 @@
+name: quality_factor
+display_name: 高质量因子选股
+description: 基于ROE/现金流/估值的高质量因子筛选，2026年最稳Alpha源
+category: fundamental
+confidence_weight: 0.85
+applicable_market:
+  - trend
+  - oscillation
+  - reversal
+instructions: |
+  ## 高质量因子选股策略（2026年验证有效）
+
+  基于最新量化研究，高质量因子2026年前2月累计跑赢沪深300约2.4%。
+  本策略筛选盈利稳定、现金流健康、估值合理的标的。
+
+  ### 筛选条件（满足4/5即可）：
+  1. 最近4季度ROE均 > 8%（盈利稳定性）
+  2. 经营现金流/净利润 > 0.7（现金流质量）
+  3. PE(TTM) < 行业中位数（估值不贵）
+  4. 资产负债率 < 60%（财务安全）
+  5. 近3年营收CAGR > 5%（可持续增长）
+
+  ### 数据来源说明：
+  - 需要基本面数据，优先使用 Tushare Pro fina_indicator 接口
+  - 如无Tushare Token，使用 akshare 东财财务指标接口
+  - 基本面数据更新频率为季报，非实时数据
+
+  ### 注意事项：
+  - 本策略作为选股过滤器，配合技术面策略（如趋势策略）确认买点
+  - 不提供具体买卖时点，仅判断"值不值得关注"
+  - 需要 get_fundamental_profile 工具支持（如不可用则跳过）
+required_tools:
+  - analyze_trend
+core_rules: [5]
+# Quantitative backtesting rules (Phase 1)
+# Requires fundamental data from Tushare Pro (ROE, cash flow, PE).
+# Deferred pending Tushare integration.
+quantitative_rules:
+  backtestable: false

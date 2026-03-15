@@ -267,24 +267,26 @@ class EfinanceFetcher(BaseFetcher):
         except Exception as e:
             logger.debug(f"设置 User-Agent 失败: {e}")
     
+    # Minimum interval between efinance requests (anti-ban), configurable
+    _MIN_REQUEST_INTERVAL_MS = int(os.getenv("EFINANCE_MIN_INTERVAL_MS", "500"))
+
     def _enforce_rate_limit(self) -> None:
         """
-        强制执行速率限制
-        
-        策略：
-        1. 检查距离上次请求的时间间隔
-        2. 如果间隔不足，补充休眠时间
-        3. 然后再执行随机 jitter 休眠
+        Enforce rate limiting between requests.
+
+        Strategy:
+        1. Ensure at least _MIN_REQUEST_INTERVAL_MS between requests
+        2. Add random jitter sleep on top
         """
         if self._last_request_time is not None:
-            elapsed = time.time() - self._last_request_time
-            min_interval = self.sleep_min
-            if elapsed < min_interval:
-                additional_sleep = min_interval - elapsed
-                logger.debug(f"补充休眠 {additional_sleep:.2f} 秒")
-                time.sleep(additional_sleep)
+            elapsed_ms = (time.time() - self._last_request_time) * 1000
+            min_interval = max(self._MIN_REQUEST_INTERVAL_MS, self.sleep_min * 1000)
+            if elapsed_ms < min_interval:
+                wait_s = (min_interval - elapsed_ms) / 1000
+                logger.debug(f"Rate limit: waiting {wait_s:.2f}s (min_interval={min_interval}ms)")
+                time.sleep(wait_s)
         
-        # 执行随机 jitter 休眠
+        # Random jitter sleep
         self.random_sleep(self.sleep_min, self.sleep_max)
         self._last_request_time = time.time()
     

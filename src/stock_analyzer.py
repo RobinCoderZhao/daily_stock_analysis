@@ -140,6 +140,12 @@ class TrendAnalysisResult:
     turnover_avg_20d: float = 0.0   # 20-day average turnover rate %
     turnover_trend: str = ""        # Turnover trend: "升温" / "降温" / "平稳"
 
+    # KDJ indicator
+    kdj_k: float = 50.0             # K value (0-100)
+    kdj_d: float = 50.0             # D value (0-100)
+    kdj_j: float = 50.0             # J value (can exceed 0-100)
+    kdj_signal: str = ""            # "golden_cross" / "dead_cross" / "neutral"
+
     # MA slope
     ma20_slope: float = 0.0         # MA20 5-day slope (% change)
     ma20_direction: str = ""        # MA20 direction: "上行" / "下行" / "走平"
@@ -193,6 +199,10 @@ class TrendAnalysisResult:
             'turnover_avg_5d': self.turnover_avg_5d,
             'turnover_avg_20d': self.turnover_avg_20d,
             'turnover_trend': self.turnover_trend,
+            'kdj_k': self.kdj_k,
+            'kdj_d': self.kdj_d,
+            'kdj_j': self.kdj_j,
+            'kdj_signal': self.kdj_signal,
             'ma20_slope': self.ma20_slope,
             'ma20_direction': self.ma20_direction,
         }
@@ -256,9 +266,10 @@ class StockTrendAnalyzer:
         # 计算均线
         df = self._calculate_mas(df)
 
-        # 计算 MACD 和 RSI
+        # 计算 MACD, RSI, KDJ
         df = self._calculate_macd(df)
         df = self._calculate_rsi(df)
+        df = self._calculate_kdj(df, self.KDJ_N, self.KDJ_M1, self.KDJ_M2)
 
         # 计算 ATR
         df = self._calculate_atr(df)
@@ -291,6 +302,9 @@ class StockTrendAnalyzer:
 
         # 6. RSI 分析
         self._analyze_rsi(df, result)
+
+        # 6b. KDJ analysis
+        self._analyze_kdj(df, result)
 
         # 7. ATR 分析
         self._analyze_atr(df, result)
@@ -366,6 +380,11 @@ class StockTrendAnalyzer:
 
         return df
 
+    # KDJ calculation parameters
+    KDJ_N = 9    # Look-back period
+    KDJ_M1 = 3   # K smoothing
+    KDJ_M2 = 3   # D smoothing
+
     def _calculate_rsi(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         计算 RSI 指标
@@ -400,6 +419,67 @@ class StockTrendAnalyzer:
             df[col_name] = rsi
 
         return df
+
+    def _calculate_kdj(self, df: pd.DataFrame, n: int = 9, m1: int = 3, m2: int = 3) -> pd.DataFrame:
+        """Calculate KDJ indicator.
+
+        KDJ formula:
+          RSV = (close - LLV(low, n)) / (HHV(high, n) - LLV(low, n)) * 100
+          K = EMA(RSV, m1)
+          D = EMA(K, m2)
+          J = 3*K - 2*D
+
+        Args:
+            df: DataFrame with 'close', 'high', 'low' columns.
+            n: Look-back period for LLV/HHV (default 9).
+            m1: Smoothing period for K (default 3).
+            m2: Smoothing period for D (default 3).
+
+        Returns:
+            DataFrame with KDJ_K, KDJ_D, KDJ_J columns.
+        """
+        df = df.copy()
+        low_n = df['low'].rolling(window=n, min_periods=1).min()
+        high_n = df['high'].rolling(window=n, min_periods=1).max()
+        rsv = (df['close'] - low_n) / (high_n - low_n + 1e-10) * 100
+
+        df['KDJ_K'] = rsv.ewm(span=m1, adjust=False).mean()
+        df['KDJ_D'] = df['KDJ_K'].ewm(span=m2, adjust=False).mean()
+        df['KDJ_J'] = 3 * df['KDJ_K'] - 2 * df['KDJ_D']
+
+        return df
+
+    def _analyze_kdj(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
+        """Analyze KDJ indicator for overbought/oversold and cross signals."""
+        if 'KDJ_K' not in df.columns or len(df) < 10:
+            result.kdj_signal = "数据不足"
+            return
+
+        latest = df.iloc[-1]
+        prev = df.iloc[-2] if len(df) >= 2 else latest
+
+        k_val = float(latest['KDJ_K'])
+        d_val = float(latest['KDJ_D'])
+        j_val = float(latest['KDJ_J'])
+
+        result.kdj_k = round(k_val, 2)
+        result.kdj_d = round(d_val, 2)
+        result.kdj_j = round(j_val, 2)
+
+        # Detect golden cross / dead cross
+        prev_k = float(prev['KDJ_K'])
+        prev_d = float(prev['KDJ_D'])
+
+        if prev_k <= prev_d and k_val > d_val:
+            result.kdj_signal = "golden_cross"
+        elif prev_k >= prev_d and k_val < d_val:
+            result.kdj_signal = "dead_cross"
+        elif k_val < 20 and j_val < 0:
+            result.kdj_signal = "oversold"
+        elif k_val > 80 and j_val > 100:
+            result.kdj_signal = "overbought"
+        else:
+            result.kdj_signal = "neutral"
     
     def _analyze_trend(self, df: pd.DataFrame, result: TrendAnalysisResult) -> None:
         """

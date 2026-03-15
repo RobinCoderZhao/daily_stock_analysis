@@ -46,3 +46,28 @@ confidence_weight: 0.80
 applicable_market:
   - trend
   - oscillation
+# Quantitative backtesting rules (Phase 1)
+quantitative_rules:
+  buy_conditions:
+    - indicator: macd_status
+      operator: "in"
+      value: ["GOLDEN_CROSS", "BULLISH"]
+    - indicator: volume_ratio_5d
+      operator: ">"
+      value: 1.2
+    - indicator: trend_status
+      operator: "not_in"
+      value: ["强势空头"]
+    - indicator: bias_ma5
+      operator: "<"
+      value: 5.0
+  sell_conditions:
+    - indicator: macd_status
+      operator: "=="
+      value: "DEAD_CROSS"
+    - indicator: trend_status
+      operator: "in"
+      value: ["空头排列", "强势空头"]
+  holding_days: 15
+  stop_loss_atr_multiple: 2.0
+  take_profit_atr_multiple: 3.0
