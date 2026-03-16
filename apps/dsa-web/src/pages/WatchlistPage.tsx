@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { watchlistApi, type EnrichedWatchlistItem } from '../api/watchlist';
 import { historyApi } from '../api/history';
+import { analysisApi, DuplicateTaskError } from '../api/analysis';
 import { getParsedApiError } from '../api/error';
 import { ApiErrorAlert } from '../components/common';
 import { ReportSummary } from '../components/report';
@@ -45,14 +46,13 @@ function formatDate(iso: string | null): string {
   return `${y}/${m}/${day} ${h}:${min}`;
 }
 
-/* ─── Stock Card ─── */
+/* ─── Stock Card (only remove button, no analyze) ─── */
 const StockCard: React.FC<{
   item: EnrichedWatchlistItem;
   isActive: boolean;
   onClick: () => void;
   onRemove: () => void;
-  onAnalyze: () => void;
-}> = ({ item, isActive, onClick, onRemove, onAnalyze }) => {
+}> = ({ item, isActive, onClick, onRemove }) => {
   const score = item.composite_score ?? item.sentiment_score;
   const displayName = item.name && item.name !== item.code ? item.name : null;
   return (
@@ -97,42 +97,32 @@ const StockCard: React.FC<{
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
-            className="rounded-lg p-1.5 text-muted hover:bg-cyan/10 hover:text-cyan transition"
-            title="重新分析"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="rounded-lg p-1.5 text-muted hover:bg-danger/10 hover:text-danger transition"
-            title="移除"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        {/* Remove button only */}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="shrink-0 rounded-lg p-1.5 text-muted opacity-0 group-hover:opacity-100 hover:bg-danger/10 hover:text-danger transition"
+          title="移除"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
     </div>
   );
 };
 
-/* ─── Analysis Drawer using ReportSummary ─── */
+/* ─── Analysis Drawer with "开始分析" button ─── */
 const AnalysisDrawer: React.FC<{
   analysisId: number | null;
   stockName: string;
   stockCode: string;
+  isAnalyzing: boolean;
+  analyzeStatus: string | null;
   onClose: () => void;
-}> = ({ analysisId, stockName, stockCode, onClose }) => {
+  onAnalyze: () => void;
+}> = ({ analysisId, stockName, stockCode, isAnalyzing, analyzeStatus, onClose, onAnalyze }) => {
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -166,13 +156,13 @@ const AnalysisDrawer: React.FC<{
 
   return (
     <>
-      {/* Backdrop — visible on ALL screen sizes, click to close */}
+      {/* Backdrop */}
       <div
         className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Drawer panel — wider to fit full report */}
+      {/* Drawer panel */}
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-3xl bg-base/95 backdrop-blur-xl border-l border-white/10 shadow-2xl overflow-y-auto animate-slide-in-right">
         {/* Header */}
         <div className="sticky top-0 z-10 bg-base/90 backdrop-blur-sm border-b border-white/8 px-6 py-4">
@@ -181,16 +171,57 @@ const AnalysisDrawer: React.FC<{
               <h2 className="text-lg font-semibold text-white">{stockName || stockCode}</h2>
               <p className="text-xs text-muted font-mono">{stockCode}</p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-muted hover:bg-white/10 hover:text-white transition"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Green "开始分析" button */}
+              <button
+                type="button"
+                onClick={onAnalyze}
+                disabled={isAnalyzing}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-medium text-sm text-white
+                  bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  shadow-lg shadow-emerald-500/20 transition-all duration-200"
+              >
+                {isAnalyzing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    分析中...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    开始分析
+                  </>
+                )}
+              </button>
+              {/* Close button */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg p-2 text-muted hover:bg-white/10 hover:text-white transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
+          {/* Analysis status feedback */}
+          {analyzeStatus && (
+            <div className={`mt-2 text-xs px-3 py-1.5 rounded-lg ${
+              analyzeStatus.includes('失败') || analyzeStatus.includes('错误')
+                ? 'bg-danger/10 text-danger'
+                : 'bg-emerald-500/10 text-emerald-400'
+            }`}>
+              {analyzeStatus}
+            </div>
+          )}
         </div>
 
         {/* Content — reuse HomePage's ReportSummary */}
@@ -215,7 +246,7 @@ const AnalysisDrawer: React.FC<{
                 </svg>
               </div>
               <h3 className="text-base font-medium text-white mb-1">暂无分析数据</h3>
-              <p className="text-xs text-muted">点击「重新分析」开始首次分析</p>
+              <p className="text-xs text-muted mb-4">点击上方「开始分析」开始首次分析</p>
             </div>
           ) : null}
         </div>
@@ -236,7 +267,11 @@ const WatchlistPage: React.FC = () => {
   const [inputError, setInputError] = useState<string>();
   const [isAdding, setIsAdding] = useState(false);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const [analyzeConfirm, setAnalyzeConfirm] = useState<string | null>(null);
+
+  // Analysis state (in-place, no navigation)
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzeStatus, setAnalyzeStatus] = useState<string | null>(null);
+  const [analyzeConfirm, setAnalyzeConfirm] = useState(false);
 
   const selectedItem = items.find((i) => i.code === selectedCode) ?? null;
 
@@ -286,14 +321,39 @@ const WatchlistPage: React.FC = () => {
     }
   };
 
-  const handleAnalyze = (code: string) => {
-    setAnalyzeConfirm(code);
+  // Open confirmation dialog from drawer "开始分析" button
+  const handleAnalyzeClick = () => {
+    setAnalyzeConfirm(true);
   };
 
-  const confirmAnalyze = () => {
-    if (!analyzeConfirm) return;
-    navigate(`/chat?stock=${analyzeConfirm}`);
-    setAnalyzeConfirm(null);
+  // Confirm and run analysis in-place (no navigation)
+  const confirmAnalyze = async () => {
+    if (!selectedCode) return;
+    setAnalyzeConfirm(false);
+    setIsAnalyzing(true);
+    setAnalyzeStatus(null);
+    try {
+      const response = await analysisApi.analyzeAsync({
+        stockCode: selectedCode,
+        reportType: 'detailed',
+      });
+      setAnalyzeStatus(`分析任务已提交，请稍后刷新查看最新报告（任务ID: ${response.taskId.slice(0, 8)}...）`);
+    } catch (err) {
+      if (err instanceof DuplicateTaskError) {
+        setAnalyzeStatus(`股票 ${err.stockCode} 正在分析中，请等待完成`);
+      } else {
+        setAnalyzeStatus(`分析失败：${getParsedApiError(err)?.message || '未知错误'}`);
+      }
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Reset analyze status when drawer closes
+  const handleDrawerClose = () => {
+    setSelectedCode(null);
+    setAnalyzeStatus(null);
+    setAnalyzeConfirm(false);
   };
 
   return (
@@ -372,35 +432,37 @@ const WatchlistPage: React.FC = () => {
               isActive={selectedCode === item.code}
               onClick={() => setSelectedCode(selectedCode === item.code ? null : item.code)}
               onRemove={() => handleRemove(item.code)}
-              onAnalyze={() => handleAnalyze(item.code)}
             />
           ))}
         </div>
       )}
 
-      {/* Analysis detail drawer — reuses HomePage's ReportSummary */}
+      {/* Analysis detail drawer */}
       {selectedItem && (
         <AnalysisDrawer
           analysisId={selectedItem.analysis_id}
           stockName={selectedItem.name || selectedItem.code}
           stockCode={selectedItem.code}
-          onClose={() => setSelectedCode(null)}
+          isAnalyzing={isAnalyzing}
+          analyzeStatus={analyzeStatus}
+          onClose={handleDrawerClose}
+          onAnalyze={handleAnalyzeClick}
         />
       )}
 
       {/* Analyze confirmation dialog */}
-      {analyzeConfirm && (
+      {analyzeConfirm && selectedCode && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-base/95 p-6 shadow-2xl">
             <h3 className="text-base font-semibold text-white mb-2">确认分析</h3>
             <p className="text-sm text-secondary mb-4">
-              重新分析 <span className="text-white font-medium">{analyzeConfirm}</span> 将消耗 1 次 Agent 调用次数。
+              分析 <span className="text-white font-medium">{selectedItem?.name || selectedCode}</span> 将消耗 1 次 Agent 调用次数。
               确认继续？
             </p>
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setAnalyzeConfirm(null)}
+                onClick={() => setAnalyzeConfirm(false)}
                 className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-secondary hover:bg-white/10 transition"
               >
                 取消
@@ -408,7 +470,7 @@ const WatchlistPage: React.FC = () => {
               <button
                 type="button"
                 onClick={confirmAnalyze}
-                className="flex-1 btn-primary py-2"
+                className="flex-1 rounded-xl px-4 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-400 transition"
               >
                 确认分析
               </button>
